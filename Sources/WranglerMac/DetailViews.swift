@@ -272,8 +272,8 @@ struct D1DetailView: View {
     @Environment(AppModel.self) private var model
     let database: D1Database
 
-    enum Mode: String, CaseIterable { case schema = "Schema", query = "Query" }
-    @State private var mode: Mode = .schema
+    enum Mode: String, CaseIterable { case diagram = "Diagram", schema = "Schema", query = "Query" }
+    @State private var mode: Mode = .diagram
 
     @State private var tables: [DBTable] = []
     @State private var selected: String?
@@ -293,6 +293,7 @@ struct D1DetailView: View {
             Divider()
 
             switch mode {
+            case .diagram: schemaGated { ERDView(tables: tables) }
             case .schema: schemaView
             case .query: D1QueryConsole(database: database)
             }
@@ -300,7 +301,7 @@ struct D1DetailView: View {
         .navigationTitle(database.name)
         .navigationSubtitle("D1 database")
         .toolbar {
-            if mode == .schema {
+            if mode == .schema || mode == .diagram {
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await loadSchema() } } label: { Image(systemName: "arrow.clockwise") }
                         .disabled(loading)
@@ -310,7 +311,8 @@ struct D1DetailView: View {
         .task { if !loaded { await loadSchema() } }
     }
 
-    @ViewBuilder private var schemaView: some View {
+    /// Shared loading / error / empty gate for the schema-backed tabs.
+    @ViewBuilder private func schemaGated<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         if loading {
             LoadingMatrix(caption: "READING SCHEMA", tint: Color(hex: 0x7C5CFC))
         } else if let schemaError {
@@ -323,6 +325,12 @@ struct D1DetailView: View {
             ContentUnavailableView("No tables", systemImage: "tablecells",
                                    description: Text("This database has no user tables."))
         } else {
+            content()
+        }
+    }
+
+    @ViewBuilder private var schemaView: some View {
+        schemaGated {
             HSplitView {
                 tableList.frame(minWidth: 190, idealWidth: 220, maxWidth: 300)
                 if let t = tables.first(where: { $0.name == selected }) ?? tables.first {
@@ -558,6 +566,208 @@ struct WrapHStack<Content: View>: View {
 
 extension Optional where Wrapped == String {
     var isNilOrEmpty: Bool { self?.isEmpty ?? true }
+}
+
+// MARK: - ERD (entity-relationship diagram)
+
+struct ERDView: View {
+    let tables: [DBTable]
+
+    @State private var positions: [String: CGPoint] = [:]   // node centers
+    @State private var canvas = CGSize(width: 1200, height: 800)
+    @State private var scale: CGFloat = 0.85
+    @State private var activeDrag: String?
+    @State private var dragOrigin: CGPoint = .zero
+
+    private let nodeWidth: CGFloat = 210
+    private let rowHeight: CGFloat = 19
+    private let headerHeight: CGFloat = 32
+    private let maxRows = 12
+
+    private var byName: [String: DBTable] { Dictionary(tables.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a }) }
+
+    private func rows(_ t: DBTable) -> Int { min(t.columns.count, maxRows) + (t.columns.count > maxRows ? 1 : 0) }
+    private func size(_ t: DBTable) -> CGSize { CGSize(width: nodeWidth, height: headerHeight + CGFloat(rows(t)) * rowHeight + 2) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            controls
+            Divider()
+            ScrollView([.horizontal, .vertical]) {
+                diagram
+                    .frame(width: canvas.width, height: canvas.height)
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(width: canvas.width * scale, height: canvas.height * scale, alignment: .topLeading)
+                    .padding(24)
+            }
+            .background(gridBackground)
+        }
+        .onAppear { if positions.isEmpty { layout() } }
+        .onChange(of: tables.map(\.id)) { _, _ in layout() }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Label("^[\(tables.count) table](inflect: true)", systemImage: "point.3.connected.trianglepath.dotted")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Text("drag tables to arrange").font(.caption2).foregroundStyle(.tertiary)
+            Button { scale = max(0.35, scale - 0.15) } label: { Image(systemName: "minus.magnifyingglass") }
+            Text("\(Int(scale * 100))%").font(.caption.monospacedDigit()).frame(width: 38)
+            Button { scale = min(2, scale + 0.15) } label: { Image(systemName: "plus.magnifyingglass") }
+            Button("Reset") { scale = 0.85; layout() }.controlSize(.small)
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private var gridBackground: some View {
+        Canvas { ctx, size in
+            let spacing: CGFloat = 22
+            var x: CGFloat = 0
+            while x < size.width { ctx.stroke(Path { $0.move(to: CGPoint(x: x, y: 0)); $0.addLine(to: CGPoint(x: x, y: size.height)) }, with: .color(.gray.opacity(0.06)), lineWidth: 1); x += spacing }
+            var y: CGFloat = 0
+            while y < size.height { ctx.stroke(Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }, with: .color(.gray.opacity(0.06)), lineWidth: 1); y += spacing }
+        }
+    }
+
+    private var diagram: some View {
+        ZStack(alignment: .topLeading) {
+            Canvas { ctx, _ in drawEdges(ctx) }
+            ForEach(tables) { t in
+                ERDNode(table: t, size: size(t), maxRows: maxRows)
+                    .position(positions[t.name] ?? CGPoint(x: 100, y: 100))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { v in
+                                if activeDrag != t.name { activeDrag = t.name; dragOrigin = positions[t.name] ?? .zero }
+                                positions[t.name] = CGPoint(x: dragOrigin.x + v.translation.width / scale,
+                                                            y: dragOrigin.y + v.translation.height / scale)
+                            }
+                            .onEnded { _ in activeDrag = nil }
+                    )
+            }
+        }
+    }
+
+    // MARK: Edges
+
+    private func drawEdges(_ ctx: GraphicsContext) {
+        for t in tables {
+            guard let sc = positions[t.name] else { continue }
+            let ss = size(t)
+            for fk in t.foreignKeys {
+                guard let target = byName[fk.table], let tc = positions[fk.table] else { continue }
+                let color = Color(hex: 0x7C5CFC).opacity(0.7)
+                if fk.table == t.name {
+                    drawSelfLoop(ctx, center: sc, size: ss, color: color)
+                    continue
+                }
+                let ts = size(target)
+                let p1 = border(center: sc, size: ss, toward: tc)
+                let p2 = border(center: tc, size: ts, toward: sc)
+                ctx.stroke(Path { $0.move(to: p1); $0.addLine(to: p2) }, with: .color(color), lineWidth: 1.6)
+                drawArrow(ctx, tip: p2, from: p1, color: color)
+                // little dot at the FK (source) end
+                ctx.fill(Path(ellipseIn: CGRect(x: p1.x - 3, y: p1.y - 3, width: 6, height: 6)), with: .color(color))
+            }
+        }
+    }
+
+    private func border(center: CGPoint, size: CGSize, toward: CGPoint) -> CGPoint {
+        let dx = toward.x - center.x, dy = toward.y - center.y
+        guard dx != 0 || dy != 0 else { return center }
+        let hw = size.width / 2 + 2, hh = size.height / 2 + 2
+        let sx = dx != 0 ? hw / abs(dx) : .greatestFiniteMagnitude
+        let sy = dy != 0 ? hh / abs(dy) : .greatestFiniteMagnitude
+        let s = min(sx, sy)
+        return CGPoint(x: center.x + dx * s, y: center.y + dy * s)
+    }
+
+    private func drawArrow(_ ctx: GraphicsContext, tip: CGPoint, from: CGPoint, color: Color) {
+        let ang = atan2(tip.y - from.y, tip.x - from.x)
+        let len: CGFloat = 9, spread: CGFloat = .pi / 7
+        let p1 = CGPoint(x: tip.x - len * cos(ang - spread), y: tip.y - len * sin(ang - spread))
+        let p2 = CGPoint(x: tip.x - len * cos(ang + spread), y: tip.y - len * sin(ang + spread))
+        ctx.fill(Path { $0.move(to: tip); $0.addLine(to: p1); $0.addLine(to: p2); $0.closeSubpath() }, with: .color(color))
+    }
+
+    private func drawSelfLoop(_ ctx: GraphicsContext, center: CGPoint, size: CGSize, color: Color) {
+        let x = center.x + size.width / 2, y = center.y - size.height / 4
+        let r: CGFloat = 16
+        ctx.stroke(Path(ellipseIn: CGRect(x: x - 2, y: y - r, width: r * 2, height: r * 2)), with: .color(color), lineWidth: 1.6)
+        drawArrow(ctx, tip: CGPoint(x: x - 2, y: y), from: CGPoint(x: x + 8, y: y - 4), color: color)
+    }
+
+    // MARK: Layout
+
+    private func layout() {
+        guard !tables.isEmpty else { return }
+        let cols = max(1, Int(ceil(Double(tables.count).squareRoot())))
+        let gapX: CGFloat = 90, gapY: CGFloat = 55
+        var pos: [String: CGPoint] = [:]
+        var x: CGFloat = 30, y: CGFloat = 30
+        var rowMax: CGFloat = 0, col = 0, maxX: CGFloat = 0
+        for t in tables {
+            let s = size(t)
+            pos[t.name] = CGPoint(x: x + s.width / 2, y: y + s.height / 2)
+            rowMax = max(rowMax, s.height)
+            x += nodeWidth + gapX
+            maxX = max(maxX, x)
+            col += 1
+            if col >= cols { col = 0; x = 30; y += rowMax + gapY; rowMax = 0 }
+        }
+        positions = pos
+        canvas = CGSize(width: max(900, maxX + 40), height: max(600, y + rowMax + 60))
+    }
+}
+
+struct ERDNode: View {
+    let table: DBTable
+    let size: CGSize
+    let maxRows: Int
+
+    private func isFK(_ c: String) -> Bool { table.foreignKeys.contains { $0.from == c } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "tablecells").font(.caption)
+                Text(table.name).fontWeight(.semibold).lineLimit(1)
+                Spacer()
+                if !table.foreignKeys.isEmpty { Image(systemName: "link").font(.caption2).opacity(0.8) }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .frame(maxWidth: .infinity)
+            .background(LinearGradient(colors: [Color(hex: 0x9B7CFC), Color(hex: 0x7C5CFC)], startPoint: .top, endPoint: .bottom))
+
+            ForEach(Array(table.columns.prefix(maxRows))) { col in
+                HStack(spacing: 5) {
+                    Image(systemName: col.pk ? "key.fill" : (isFK(col.name) ? "link" : "circle.fill"))
+                        .font(.system(size: col.pk || isFK(col.name) ? 9 : 4))
+                        .foregroundStyle(col.pk ? Color.yellow : (isFK(col.name) ? Color(hex: 0x3A7BD5) : Color.secondary.opacity(0.4)))
+                        .frame(width: 12)
+                    Text(col.name).font(.system(size: 11, design: .monospaced)).fontWeight(col.pk ? .semibold : .regular).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(col.type).font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 19)
+            }
+            if table.columns.count > maxRows {
+                Text("+\(table.columns.count - maxRows) more")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .frame(height: 19).frame(maxWidth: .infinity)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Color(hex: 0x7C5CFC).opacity(0.35), lineWidth: 1))
+        .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
+    }
 }
 
 struct D1QueryConsole: View {
