@@ -1,0 +1,36 @@
+name: WranglerMac
+options:
+  bundleIdPrefix: com.moerdowo
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  WranglerMac:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/WranglerMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moerdowo.WranglerMac
+        PRODUCT_NAME: WranglerMac
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: WranglerMac
+        COMBINE_HIDPI_IMAGES: YES
+    info:
+      path: Sources/WranglerMac/Info.plist
+      properties:
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: ""
+        LSApplicationCategoryType: "public.app-category.developer-tools"
