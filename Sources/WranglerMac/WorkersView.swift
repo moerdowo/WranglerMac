@@ -409,11 +409,15 @@ struct MonoBlock: View {
         if text.isEmpty {
             Text(placeholder).font(.callout).foregroundStyle(.secondary)
         } else {
-            ScrollView(.horizontal) {
-                Text(text).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 200)
+            // No inner scroll: the text wraps and grows so the page's own
+            // ScrollView owns all vertical scrolling (no nested-scroll capture).
+            Text(text)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }
