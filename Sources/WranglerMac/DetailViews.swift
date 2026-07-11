@@ -367,9 +367,16 @@ struct D1DetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 SubResourceSection(title: "Database info", systemImage: "info.circle",
-                                   args: ["d1", "info", database.name, "--json"], emptyText: "No info.")
+                                   args: ["d1", "info", database.name, "--json"], emptyText: "No info.",
+                                   tint: Color(hex: 0x7C5CFC),
+                                   stats: [
+                                    StatSpec(keys: ["num_tables", "tables"], label: "Tables", icon: "tablecells"),
+                                    StatSpec(keys: ["database_size", "file_size", "size"], label: "Size", icon: "internaldrive"),
+                                    StatSpec(keys: ["running_in_region", "region"], label: "Region", icon: "mappin.and.ellipse"),
+                                   ])
                 SubResourceSection(title: "Time Travel", systemImage: "clock.arrow.circlepath",
-                                   args: ["d1", "time-travel", "info", database.name], emptyText: "No Time Travel info.")
+                                   args: ["d1", "time-travel", "info", database.name], emptyText: "No Time Travel info.",
+                                   tint: Color(hex: 0x7C5CFC))
                 SectionBox(title: "Export", systemImage: "square.and.arrow.up") {
                     HStack {
                         Text("Download the database as a .sql file.").font(.callout).foregroundStyle(.secondary)
@@ -1002,16 +1009,26 @@ struct R2DetailView: View {
                 infoNote
 
                 SubResourceSection(title: "Bucket info", systemImage: "info.circle",
-                                   args: ["r2", "bucket", "info", bucket.name], emptyText: "No info.")
+                                   args: ["r2", "bucket", "info", bucket.name], emptyText: "No info.",
+                                   tint: Color(hex: 0xF6821F),
+                                   stats: [
+                                    StatSpec(keys: ["object_count", "objects"], label: "Objects", icon: "doc.on.doc"),
+                                    StatSpec(keys: ["bucket_size", "size"], label: "Size", icon: "internaldrive"),
+                                    StatSpec(keys: ["location"], label: "Location", icon: "mappin.and.ellipse"),
+                                   ])
                 R2PublicAccessSection(bucket: bucket.name)
                 SubResourceSection(title: "Custom domains", systemImage: "globe.badge.chevron.backward",
-                                   args: ["r2", "bucket", "domain", "list", bucket.name], emptyText: "No custom domains.")
+                                   args: ["r2", "bucket", "domain", "list", bucket.name], emptyText: "No custom domains.",
+                                   tint: Color(hex: 0xF6821F))
                 SubResourceSection(title: "CORS rules", systemImage: "arrow.left.arrow.right",
-                                   args: ["r2", "bucket", "cors", "list", bucket.name], emptyText: "No CORS rules.")
+                                   args: ["r2", "bucket", "cors", "list", bucket.name], emptyText: "No CORS rules.",
+                                   tint: Color(hex: 0xF6821F))
                 SubResourceSection(title: "Lifecycle rules", systemImage: "clock.arrow.2.circlepath",
-                                   args: ["r2", "bucket", "lifecycle", "list", bucket.name], emptyText: "No lifecycle rules.")
+                                   args: ["r2", "bucket", "lifecycle", "list", bucket.name], emptyText: "No lifecycle rules.",
+                                   tint: Color(hex: 0xF6821F))
                 SubResourceSection(title: "Event notifications", systemImage: "bell.badge",
-                                   args: ["r2", "bucket", "notification", "list", bucket.name], emptyText: "No notification rules.")
+                                   args: ["r2", "bucket", "notification", "list", bucket.name], emptyText: "No notification rules.",
+                                   tint: Color(hex: 0xF6821F))
             }
             .frame(maxWidth: 620).frame(maxWidth: .infinity)
             .padding(24)

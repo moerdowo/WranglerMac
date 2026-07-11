@@ -135,6 +135,27 @@ enum CloudflareAPI {
         return decoded.result ?? []
     }
 
+    /// Run inference against a Workers AI model: POST /accounts/{id}/ai/run/{model}.
+    /// Returns the pretty-printed response (or a note for binary/image output).
+    static func runAI(account: String, model: String, body: String, token: String) async throws -> String {
+        guard let url = URL(string: base + "/accounts/\(account)/ai/run/\(model)") else { throw CFAPIError.api("Bad model id.") }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Data(body.utf8)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let http = resp as? HTTPURLResponse
+        if let ct = http?.value(forHTTPHeaderField: "Content-Type"), ct.contains("image") || ct.contains("audio") {
+            return "⧉ Binary \(ct) response (\(byteString(Int64(data.count)))). Media models return raw bytes — not shown here."
+        }
+        if let obj = try? JSONSerialization.jsonObject(with: data),
+           let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) {
+            return String(decoding: pretty, as: UTF8.self)
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     static func listWorkers(account: String, token: String) async throws -> [WorkerScript] {
         if DemoMode.on { return decode(DemoData.workersJSON) }
         return try await getList("/accounts/\(account)/workers/scripts", token: token, as: WorkerScript.self)

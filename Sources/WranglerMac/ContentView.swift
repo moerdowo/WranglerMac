@@ -56,7 +56,7 @@ struct ContentView: View {
             case .vectorize: GenericResourceView(type: CFResources.vectorize)
             case .hyperdrive: GenericResourceView(type: CFResources.hyperdrive)
             case .pipelines: GenericResourceView(type: CFResources.pipelines)
-            case .aiModels: GenericResourceView(type: CFResources.aiModels)
+            case .aiModels: AIModelsView()
             case .workflows: GenericResourceView(type: CFResources.workflows)
             case .containers: GenericResourceView(type: CFResources.containers)
             case .dispatch: GenericResourceView(type: CFResources.dispatch)
