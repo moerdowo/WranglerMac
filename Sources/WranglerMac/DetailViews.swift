@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 // MARK: - KV key browser / editor
 
@@ -29,6 +30,10 @@ struct KVDetailView: View {
         .navigationTitle(namespace.title)
         .navigationSubtitle("KV namespace")
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { importBulk() } label: { Image(systemName: "square.and.arrow.down.on.square") }
+                    .help("Bulk import from JSON")
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showAdd = true } label: { Image(systemName: "plus") }
                     .help("Add key")
@@ -208,6 +213,19 @@ struct KVDetailView: View {
         withAnimation { toast = msg }
         Task { try? await Task.sleep(nanoseconds: 1_600_000_000); withAnimation { toast = nil } }
     }
+
+    private func importBulk() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            busy = true; defer { busy = false }
+            let r = await model.exec(["kv", "bulk", "put", url.path, "--namespace-id", namespace.id])
+            if r.ok { flash("Imported \(url.lastPathComponent)"); await loadKeys() }
+            else { flash("Import failed") }
+        }
+    }
 }
 
 private struct AddKeySheet: View {
@@ -272,8 +290,10 @@ struct D1DetailView: View {
     @Environment(AppModel.self) private var model
     let database: D1Database
 
-    enum Mode: String, CaseIterable { case diagram = "Diagram", schema = "Schema", query = "Query" }
+    enum Mode: String, CaseIterable { case diagram = "Diagram", schema = "Schema", query = "Query", info = "Info" }
     @State private var mode: Mode = .diagram
+    @State private var exporting = false
+    @State private var exportStatus: String?
 
     @State private var tables: [DBTable] = []
     @State private var selected: String?
@@ -296,6 +316,7 @@ struct D1DetailView: View {
             case .diagram: schemaGated { ERDView(tables: tables) }
             case .schema: schemaView
             case .query: D1QueryConsole(database: database)
+            case .info: infoView
             }
         }
         .navigationTitle(database.name)
@@ -339,6 +360,40 @@ struct D1DetailView: View {
                     Color.clear
                 }
             }
+        }
+    }
+
+    private var infoView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SubResourceSection(title: "Database info", systemImage: "info.circle",
+                                   args: ["d1", "info", database.name, "--json"], emptyText: "No info.")
+                SubResourceSection(title: "Time Travel", systemImage: "clock.arrow.circlepath",
+                                   args: ["d1", "time-travel", "info", database.name], emptyText: "No Time Travel info.")
+                SectionBox(title: "Export", systemImage: "square.and.arrow.up") {
+                    HStack {
+                        Text("Download the database as a .sql file.").font(.callout).foregroundStyle(.secondary)
+                        Spacer()
+                        Button { exportDB() } label: { Label("Export…", systemImage: "arrow.down.doc") }
+                            .buttonStyle(.bordered).disabled(exporting)
+                        if exporting { ProgressView().controlSize(.small) }
+                    }
+                    if let exportStatus { Text(exportStatus).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+            .frame(maxWidth: 680).frame(maxWidth: .infinity).padding(20)
+        }
+    }
+
+    private func exportDB() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(database.name).sql"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            exporting = true; defer { exporting = false }
+            let r = await model.exec(["d1", "export", database.name, "--remote", "--output", url.path])
+            exportStatus = r.ok ? "Exported to \(url.lastPathComponent)" : stripANSI(r.stderr.nilIfEmpty ?? r.stdout)
+            if r.ok { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         }
     }
 
@@ -945,6 +1000,18 @@ struct R2DetailView: View {
                         .font(.callout)
                 }
                 infoNote
+
+                SubResourceSection(title: "Bucket info", systemImage: "info.circle",
+                                   args: ["r2", "bucket", "info", bucket.name], emptyText: "No info.")
+                R2PublicAccessSection(bucket: bucket.name)
+                SubResourceSection(title: "Custom domains", systemImage: "globe.badge.chevron.backward",
+                                   args: ["r2", "bucket", "domain", "list", bucket.name], emptyText: "No custom domains.")
+                SubResourceSection(title: "CORS rules", systemImage: "arrow.left.arrow.right",
+                                   args: ["r2", "bucket", "cors", "list", bucket.name], emptyText: "No CORS rules.")
+                SubResourceSection(title: "Lifecycle rules", systemImage: "clock.arrow.2.circlepath",
+                                   args: ["r2", "bucket", "lifecycle", "list", bucket.name], emptyText: "No lifecycle rules.")
+                SubResourceSection(title: "Event notifications", systemImage: "bell.badge",
+                                   args: ["r2", "bucket", "notification", "list", bucket.name], emptyText: "No notification rules.")
             }
             .frame(maxWidth: 620).frame(maxWidth: .infinity)
             .padding(24)
@@ -1067,6 +1134,10 @@ struct QueueDetailView: View {
                     }
                 }
                 actions
+                SubResourceSection(title: "Consumers", systemImage: "person.2.badge.gearshape",
+                                   args: ["queues", "consumer", "list", queueName], emptyText: "No consumers.")
+                SubResourceSection(title: "Event subscriptions", systemImage: "bell.badge",
+                                   args: ["queues", "subscription", "list", "--queue-name", queueName], emptyText: "No subscriptions.")
                 if let status {
                     Text(status).font(.callout).foregroundStyle(.secondary)
                 }
