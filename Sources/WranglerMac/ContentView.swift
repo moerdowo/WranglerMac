@@ -28,7 +28,6 @@ struct ContentView: View {
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 200, ideal: 220)
-            .safeAreaInset(edge: .bottom) { statusBar }
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,26 +75,6 @@ struct ContentView: View {
         }
     }
 
-    private var statusBar: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(model.binaryAvailable ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
-            Text(model.binaryAvailable ? "wrangler \(shortVersion)" : "wrangler not found")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-
-    private var shortVersion: String {
-        // wrangler --version prints e.g. "⛅️ wrangler 3.x.x"
-        let digits = model.version.split(whereSeparator: { !$0.isNumber && $0 != "." })
-        return digits.first.map(String.init) ?? model.version
-    }
 }
 
 struct MissingBinaryView: View {

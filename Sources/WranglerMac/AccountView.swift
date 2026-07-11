@@ -164,13 +164,30 @@ struct AccountView: View {
     }
 
     private var runtimeFooter: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "shippingbox.fill").font(.caption2)
-            Text(model.bundledRuntimeInfo ?? "wrangler \(model.version)")
-                .font(.caption)
+        HStack(spacing: 12) {
+            Circle()
+                .fill(model.binaryAvailable ? Color.green : Color.orange)
+                .frame(width: 9, height: 9)
+                .shadow(color: (model.binaryAvailable ? Color.green : Color.orange).opacity(0.7), radius: 3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.binaryAvailable ? "wrangler \(wranglerVersion)" : "wrangler not found")
+                    .fontWeight(.medium)
+                Text(model.bundledRuntimeInfo ?? (model.usingBundledRuntime ? "Bundled runtime" : "System runtime"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: model.usingBundledRuntime ? "shippingbox.fill" : "externaldrive")
+                .foregroundStyle(.secondary)
         }
-        .foregroundStyle(.tertiary)
-        .frame(maxWidth: .infinity)
+        .font(.callout)
+        .padding(14)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.separator))
+    }
+
+    private var wranglerVersion: String {
+        let digits = model.version.split(whereSeparator: { !$0.isNumber && $0 != "." })
+        return digits.first.map(String.init) ?? model.version.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func refresh() async {
