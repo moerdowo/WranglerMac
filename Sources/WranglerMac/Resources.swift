@@ -34,7 +34,7 @@ func loadResource<T: Identifiable>(
 }
 
 /// Remove wrangler's "⛅️ wrangler x.y.z" banner and rule lines.
-private func stripBanner(_ s: String) -> String {
+func stripBanner(_ s: String) -> String {
     s.split(separator: "\n", omittingEmptySubsequences: false)
         .map { String($0) }
         .filter { line in

@@ -13,6 +13,12 @@ struct ContentView: View {
                 Section("Resources") {
                     row(.workers); row(.pages); row(.kv); row(.d1); row(.r2); row(.queues)
                 }
+                Section("Data & AI") {
+                    row(.vectorize); row(.hyperdrive); row(.pipelines); row(.aiModels)
+                }
+                Section("Platform") {
+                    row(.workflows); row(.containers); row(.dispatch); row(.secretsStore)
+                }
                 Section("Tools") {
                     row(.dev); row(.config); row(.logs); row(.console); row(.settings)
                 }
@@ -44,6 +50,14 @@ struct ContentView: View {
             case .d1: D1View()
             case .r2: R2View()
             case .queues: QueuesView()
+            case .vectorize: GenericResourceView(type: CFResources.vectorize)
+            case .hyperdrive: GenericResourceView(type: CFResources.hyperdrive)
+            case .pipelines: GenericResourceView(type: CFResources.pipelines)
+            case .aiModels: GenericResourceView(type: CFResources.aiModels)
+            case .workflows: GenericResourceView(type: CFResources.workflows)
+            case .containers: GenericResourceView(type: CFResources.containers)
+            case .dispatch: GenericResourceView(type: CFResources.dispatch)
+            case .secretsStore: GenericResourceView(type: CFResources.secretsStore)
             case .dev: DevRunnerView()
             case .config: ConfigEditorView()
             case .logs: TailView()
