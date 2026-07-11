@@ -5,6 +5,7 @@ struct PagesView: View {
     @Environment(AppModel.self) private var model
     @State private var outcome: LoadOutcome<PagesProject>?
     @State private var loading = false
+    @State private var showNew = false
 
     var body: some View {
         NavigationStack {
@@ -17,7 +18,16 @@ struct PagesView: View {
                         ToolbarItem(placement: .automatic) { accountPicker }
                     }
                     ToolbarItem(placement: .primaryAction) {
+                        Button { showNew = true } label: { Label("New project", systemImage: "plus") }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
                         Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }.disabled(loading)
+                    }
+                }
+                .sheet(isPresented: $showNew) {
+                    PagesDeployView(existingProject: nil, initialBranch: "main") { success in
+                        showNew = false
+                        if success { Task { await reload() } }
                     }
                 }
                 .task { if outcome == nil { await reload() } }
@@ -106,6 +116,7 @@ struct PagesDetailView: View {
     @State private var confirmDelete = false
     @State private var confirmDeleteSecret: String?
     @State private var showAddSecret = false
+    @State private var showDeploy = false
 
     var body: some View {
         ScrollView {
@@ -132,6 +143,13 @@ struct PagesDetailView: View {
             AddSecretSheet { name, value in showAddSecret = false; Task { await addSecret(name: name, value: value) } }
                 cancel: { showAddSecret = false }
         }
+        .sheet(isPresented: $showDeploy) {
+            PagesDeployView(existingProject: project.name,
+                            initialBranch: project.production_branch ?? "main") { success in
+                showDeploy = false
+                if success { Task { await loadAll() } }
+            }
+        }
         .confirmationDialog("Delete Pages project “\(project.name)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete project", role: .destructive) { Task { await deleteProject() } }
             Button("Cancel", role: .cancel) {}
@@ -149,9 +167,11 @@ struct PagesDetailView: View {
                 if let s = project.subdomain { Text(s).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
+            Button { showDeploy = true } label: { Label("Deploy", systemImage: "arrow.up.circle.fill") }
+                .buttonStyle(.borderedProminent)
             if let url = project.liveURL {
                 Button { NSWorkspace.shared.open(url) } label: { Label("Open site", systemImage: "safari") }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
             }
             Button { Task { await loadAll() } } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.bordered)
         }
@@ -376,4 +396,244 @@ struct StatusBadge: View {
             .background(tint.opacity(0.15), in: Capsule())
             .foregroundStyle(tint)
     }
+}
+
+// MARK: - Deploy (drag & drop folder / files / zip)
+
+struct PagesDeployView: View {
+    @Environment(AppModel.self) private var model
+    /// nil = create a new project; otherwise deploy to this existing project.
+    let existingProject: String?
+    var initialBranch: String = "main"
+    var onFinished: (Bool) -> Void
+
+    @State private var name = ""
+    @State private var branch = ""
+    @State private var sourceDir: URL?
+    @State private var sourceLabel = ""
+    @State private var targeted = false
+    @State private var preparing = false
+    @State private var deploying = false
+    @State private var output: [String] = []
+    @State private var resultURL: URL?
+    @State private var error: String?
+    @State private var handle: StreamHandle?
+
+    private var isCreate: Bool { existingProject == nil }
+    private var projectName: String { existingProject ?? name }
+    private var canDeploy: Bool {
+        sourceDir != nil && !deploying && (existingProject != nil || !name.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(isCreate ? "New Pages project" : "Deploy to \(existingProject!)")
+                .font(.title3).bold()
+
+            if isCreate {
+                TextField("project-name", text: $name)
+                    .textFieldStyle(.roundedBorder).font(.system(.body, design: .monospaced))
+            }
+            HStack {
+                Text("Branch").foregroundStyle(.secondary)
+                TextField("production branch", text: $branch).textFieldStyle(.roundedBorder)
+            }
+
+            dropZone
+
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+
+            if deploying || !output.isEmpty || resultURL != nil {
+                outputArea
+            }
+
+            HStack {
+                if let resultURL {
+                    Button { NSWorkspace.shared.open(resultURL) } label: { Label("Open deployment", systemImage: "safari") }
+                        .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button("Close") { handle?.terminate(); onFinished(resultURL != nil) }
+                Button {
+                    Task { await deploy() }
+                } label: {
+                    if deploying { Text("Deploying…") } else { Label("Deploy", systemImage: "arrow.up.circle.fill") }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canDeploy)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .onAppear { if branch.isEmpty { branch = initialBranch } }
+    }
+
+    private var dropZone: some View {
+        VStack(spacing: 10) {
+            Image(systemName: sourceDir == nil ? "square.and.arrow.down.on.square" : "checkmark.circle.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(sourceDir == nil ? Color.secondary : Color.green)
+            if preparing {
+                Text("Preparing…").font(.callout).foregroundStyle(.secondary)
+            } else if let _ = sourceDir {
+                Text(sourceLabel).font(.callout).fontWeight(.medium).lineLimit(1)
+                Text("Ready to deploy").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Drop a folder, files, or a .zip here").font(.callout)
+                Text("or").font(.caption).foregroundStyle(.tertiary)
+                Button("Choose…") { choose() }.controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(targeted ? Color(hex: 0xF6821F).opacity(0.12) : Color.gray.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                .foregroundStyle(targeted ? Color(hex: 0xF6821F) : Color.secondary.opacity(0.4))
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            Task { await handleDrop(urls) }
+            return true
+        } isTargeted: { targeted = $0 }
+    }
+
+    private var outputArea: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(output.enumerated()), id: \.offset) { i, line in
+                        Text(line).font(.system(size: 10, design: .monospaced))
+                            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).id(i)
+                    }
+                }.padding(6)
+            }
+            .frame(height: 140)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .onChange(of: output.count) { if let last = output.indices.last { proxy.scrollTo(last, anchor: .bottom) } }
+        }
+    }
+
+    // MARK: Source selection
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK { Task { await handleDrop(panel.urls) } }
+    }
+
+    private func handleDrop(_ urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+        preparing = true; error = nil
+        defer { preparing = false }
+        do {
+            let dir = try prepareDeployDirectory(urls)
+            sourceDir = dir
+            sourceLabel = urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items"
+            if isCreate && name.isEmpty {
+                name = sanitizeProjectName(urls[0].deletingPathExtension().lastPathComponent)
+            }
+        } catch {
+            self.error = "Couldn’t read dropped items: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Deploy
+
+    private func deploy() async {
+        guard let dir = sourceDir else { return }
+        deploying = true; output = []; resultURL = nil; error = nil
+        let proj = projectName
+        let br = branch.trimmingCharacters(in: .whitespaces)
+
+        if isCreate {
+            let r = await model.exec(["pages", "project", "create", proj,
+                                      "--production-branch", br.isEmpty ? "main" : br])
+            if !r.ok && !(r.stdout + r.stderr).lowercased().contains("already") {
+                append("⚠️ create: " + stripANSI(r.stderr.nilIfEmpty ?? r.stdout))
+            }
+        }
+
+        var args = ["pages", "deploy", dir.path, "--project-name", proj,
+                    "--commit-dirty=true", "--commit-message", "Deployed via WranglerMac"]
+        if !br.isEmpty { args += ["--branch", br] }
+
+        do {
+            handle = try WranglerCLI.shared.streamSync(args,
+                onLine: { line in Task { @MainActor in append(line) } },
+                onEnd: { code in Task { @MainActor in
+                    deploying = false; handle = nil
+                    if code != 0 && resultURL == nil { error = "Deploy exited with code \(code)." }
+                    if code == 0 { onFinished(true) }
+                } })
+        } catch {
+            deploying = false
+            self.error = error.localizedDescription
+        }
+    }
+
+    @MainActor private func append(_ line: String) {
+        let c = stripANSI(line)
+        if !c.trimmingCharacters(in: .whitespaces).isEmpty { output.append(c) }
+        if output.count > 3000 { output.removeFirst(output.count - 3000) }
+        // Last pages.dev URL in the stream is the deployment URL.
+        if let r = c.range(of: #"https://[a-z0-9.-]+\.pages\.dev"#, options: .regularExpression) {
+            resultURL = URL(string: String(c[r]))
+        }
+    }
+}
+
+private func sanitizeProjectName(_ raw: String) -> String {
+    let lowered = raw.lowercased()
+    let mapped = lowered.map { ($0.isLetter || $0.isNumber) ? $0 : "-" }
+    return String(mapped).replacingOccurrences(of: "-+", with: "-", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}
+
+/// Resolve dropped URLs to a single directory to deploy: a folder is used as-is,
+/// a .zip is extracted, and loose files are copied into a temp directory.
+func prepareDeployDirectory(_ urls: [URL]) throws -> URL {
+    let fm = FileManager.default
+    if urls.count == 1 {
+        let u = urls[0]
+        var isDir: ObjCBool = false
+        fm.fileExists(atPath: u.path, isDirectory: &isDir)
+        if isDir.boolValue { return u }
+        if u.pathExtension.lowercased() == "zip" { return try extractZip(u) }
+    }
+    let temp = makeTempDir()
+    for u in urls {
+        try fm.copyItem(at: u, to: temp.appendingPathComponent(u.lastPathComponent))
+    }
+    return temp
+}
+
+private func extractZip(_ zip: URL) throws -> URL {
+    let dest = makeTempDir()
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+    p.arguments = ["-x", "-k", zip.path, dest.path]
+    try p.run(); p.waitUntilExit()
+    // If the archive contains a single top-level folder, deploy that folder.
+    let items = (try? FileManager.default.contentsOfDirectory(at: dest, includingPropertiesForKeys: [.isDirectoryKey]))?
+        .filter { $0.lastPathComponent != "__MACOSX" && $0.lastPathComponent != ".DS_Store" } ?? []
+    if items.count == 1 {
+        var isDir: ObjCBool = false
+        FileManager.default.fileExists(atPath: items[0].path, isDirectory: &isDir)
+        if isDir.boolValue { return items[0] }
+    }
+    return dest
+}
+
+private func makeTempDir() -> URL {
+    let t = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("WranglerMac-deploy-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: t, withIntermediateDirectories: true)
+    return t
 }
