@@ -19,6 +19,38 @@ struct WorkerSecret: Decodable, Identifiable, Hashable {
     var id: String { name }
 }
 
+struct WorkerDeployment: Decodable, Identifiable {
+    let id: String
+    let source: String?
+    let author_email: String?
+    let created_on: String?
+    let annotations: [String: String]?
+    let versions: [DeployedVersion]?
+
+    struct DeployedVersion: Decodable, Hashable {
+        let version_id: String
+        let percentage: Double?
+    }
+
+    var message: String? {
+        let m = annotations?["workers/message"]
+        return (m == nil || m == "-") ? nil : m
+    }
+    var trigger: String? { annotations?["workers/triggered_by"] }
+}
+
+struct WorkerVersion: Decodable, Identifiable {
+    let id: String
+    let number: Int?
+    let metadata: Meta?
+
+    struct Meta: Decodable {
+        let created_on: String?
+        let source: String?
+        let author_email: String?
+    }
+}
+
 struct D1Database: Decodable, Identifiable, Hashable {
     let uuid: String
     let name: String

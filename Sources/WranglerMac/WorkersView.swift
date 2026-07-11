@@ -1,14 +1,34 @@
 import SwiftUI
 
-/// Friendly date from an ISO8601 string.
+/// Parse an ISO8601 timestamp, tolerating 6-digit fractional seconds.
+func parseISODate(_ s: String?) -> Date? {
+    guard var str = s else { return nil }
+    if let dot = str.firstIndex(of: "."), let z = str[dot...].firstIndex(of: "Z") {
+        let frac = str[str.index(after: dot)..<z]
+        if frac.count > 3 { str.replaceSubrange(str.index(after: dot)..<z, with: frac.prefix(3)) }
+    }
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = f.date(from: str) { return d }
+    let g = ISO8601DateFormatter(); g.formatOptions = [.withInternetDateTime]
+    return g.date(from: str)
+}
+
+/// Friendly absolute date, e.g. "Jul 9, 2026 at 3:23 PM".
 func isoPretty(_ s: String?) -> String? {
-    guard let s else { return nil }
-    let p = ISO8601DateFormatter(); p.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    let date = p.date(from: s) ?? { let g = ISO8601DateFormatter(); g.formatOptions = [.withInternetDateTime]; return g.date(from: s) }()
-    guard let date else { return s }
+    guard let date = parseISODate(s) else { return s }
     let out = DateFormatter(); out.dateStyle = .medium; out.timeStyle = .short
     return out.string(from: date)
 }
+
+/// Relative time, e.g. "3 days ago".
+func relativeTime(_ s: String?) -> String? {
+    guard let date = parseISODate(s) else { return nil }
+    let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated
+    return f.localizedString(for: date, relativeTo: Date())
+}
+
+/// Short version id like "d18bdcf4".
+func shortID(_ id: String) -> String { String(id.prefix(8)) }
 
 struct WorkersView: View {
     @Environment(AppModel.self) private var model
@@ -117,10 +137,11 @@ struct WorkerDetailView: View {
     let account: String
 
     @State private var crons: [String] = []
-    @State private var deployments = ""
-    @State private var versions = ""
+    @State private var deployments: [WorkerDeployment] = []
+    @State private var versions: [WorkerVersion] = []
+    @State private var deploymentsError: String?
+    @State private var versionsError: String?
     @State private var secrets: [WorkerSecret] = []
-    @State private var loadingSection = false
     @State private var busy = false
     @State private var status: String?
     @State private var confirmDelete = false
@@ -229,7 +250,18 @@ struct WorkerDetailView: View {
 
     private var deploymentsCard: some View {
         SectionBox(title: "Deployments", systemImage: "shippingbox") {
-            MonoBlock(text: deployments, placeholder: "No deployment history.")
+            if let deploymentsError {
+                Text(deploymentsError).font(.callout).foregroundStyle(.secondary)
+            } else if deployments.isEmpty {
+                Text("No deployment history.").font(.callout).foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(deployments.enumerated()), id: \.element.id) { idx, dep in
+                        DeploymentRow(deployment: dep, isActive: idx == 0)
+                        if dep.id != deployments.last?.id { Divider() }
+                    }
+                }
+            }
         }
     }
 
@@ -238,7 +270,18 @@ struct WorkerDetailView: View {
             Button("Roll back", role: .destructive) { confirmRollback = true }
                 .buttonStyle(.borderless).controlSize(.small).disabled(busy)
         }) {
-            MonoBlock(text: versions, placeholder: "No version history.")
+            if let versionsError {
+                Text(versionsError).font(.callout).foregroundStyle(.secondary)
+            } else if versions.isEmpty {
+                Text("No version history.").font(.callout).foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(versions) { ver in
+                        VersionRow(version: ver)
+                        if ver.id != versions.last?.id { Divider() }
+                    }
+                }
+            }
         }
     }
 
@@ -308,13 +351,19 @@ struct WorkerDetailView: View {
     }
 
     private func loadDeployments() async {
-        let r = await model.exec(nameArgs(["deployments", "list"]))
-        deployments = stripANSI(r.ok ? r.stdout : (r.stderr.nilIfEmpty ?? r.stdout)).trimmingCharacters(in: .whitespacesAndNewlines)
+        deploymentsError = nil
+        let r = await model.exec(nameArgs(["deployments", "list", "--json"]))
+        guard r.ok else { deploymentsError = stripANSI(r.stderr.nilIfEmpty ?? r.stdout); return }
+        do { deployments = try JSONDecoder().decode([WorkerDeployment].self, from: WranglerCLI.extractJSON(from: r.stdout)) }
+        catch { deployments = []; deploymentsError = "Couldn’t read deployments." }
     }
 
     private func loadVersions() async {
-        let r = await model.exec(nameArgs(["versions", "list"]))
-        versions = stripANSI(r.ok ? r.stdout : (r.stderr.nilIfEmpty ?? r.stdout)).trimmingCharacters(in: .whitespacesAndNewlines)
+        versionsError = nil
+        let r = await model.exec(nameArgs(["versions", "list", "--json"]))
+        guard r.ok else { versionsError = stripANSI(r.stderr.nilIfEmpty ?? r.stdout); return }
+        do { versions = try JSONDecoder().decode([WorkerVersion].self, from: WranglerCLI.extractJSON(from: r.stdout)) }
+        catch { versions = []; versionsError = "Couldn’t read versions." }
     }
 
     private func loadCrons() async {
@@ -402,23 +451,104 @@ struct SectionBox<Content: View, Accessory: View>: View {
     }
 }
 
-struct MonoBlock: View {
-    let text: String
-    let placeholder: String
-    var body: some View {
-        if text.isEmpty {
-            Text(placeholder).font(.callout).foregroundStyle(.secondary)
-        } else {
-            // No inner scroll: the text wraps and grows so the page's own
-            // ScrollView owns all vertical scrolling (no nested-scroll capture).
-            Text(text)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+/// A small colored pill for a deployment/version source (wrangler, dashboard, …).
+struct SourceBadge: View {
+    let source: String?
+    private var text: String { (source ?? "unknown").replacingOccurrences(of: "_", with: " ") }
+    private var tint: Color {
+        switch (source ?? "").lowercased() {
+        case "wrangler", "upload": return Color(hex: 0xF6821F)
+        case "dashboard": return Color(hex: 0x3A7BD5)
+        case "api": return Color(hex: 0x7C5CFC)
+        default: return .secondary
         }
+    }
+    var body: some View {
+        Text(text)
+            .font(.caption2).fontWeight(.medium)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(tint.opacity(0.15), in: Capsule())
+            .foregroundStyle(tint)
+    }
+}
+
+private struct DeploymentRow: View {
+    let deployment: WorkerDeployment
+    let isActive: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isActive ? .green : .secondary)
+                .font(.system(size: 15))
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(relativeTime(deployment.created_on) ?? "—").fontWeight(.semibold)
+                    if isActive {
+                        Text("ACTIVE").font(.caption2).fontWeight(.bold).foregroundStyle(.green)
+                    }
+                    SourceBadge(source: deployment.source)
+                    Spacer()
+                }
+                if let email = deployment.author_email {
+                    Label(email, systemImage: "person").font(.caption).foregroundStyle(.secondary)
+                }
+                if let versions = deployment.versions, !versions.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(versions, id: \.version_id) { v in
+                            Text("\(Int(v.percentage ?? 100))% \(shortID(v.version_id))")
+                                .font(.system(.caption2, design: .monospaced))
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                        }
+                    }
+                }
+                if let msg = deployment.message {
+                    Text(msg).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+        .help(isoPretty(deployment.created_on) ?? "")
+    }
+}
+
+private struct VersionRow: View {
+    let version: WorkerVersion
+    @State private var copied = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("#\(version.number ?? 0)")
+                .font(.system(.caption, design: .monospaced)).fontWeight(.semibold)
+                .frame(minWidth: 34)
+                .padding(.vertical, 4)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(shortID(version.id)).font(.system(.callout, design: .monospaced)).fontWeight(.medium)
+                HStack(spacing: 6) {
+                    if let t = relativeTime(version.metadata?.created_on) {
+                        Text(t).font(.caption).foregroundStyle(.secondary)
+                    }
+                    SourceBadge(source: version.metadata?.source)
+                }
+            }
+            Spacer()
+            if let email = version.metadata?.author_email {
+                Text(email).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            Button {
+                copyToPasteboard(version.id)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+            } label: {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").foregroundStyle(copied ? .green : .secondary)
+            }
+            .buttonStyle(.plain).help("Copy full version ID")
+        }
+        .padding(.vertical, 8)
+        .help(isoPretty(version.metadata?.created_on) ?? "")
     }
 }
 
