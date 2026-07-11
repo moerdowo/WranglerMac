@@ -6,7 +6,7 @@
 
 **A native macOS app for managing Cloudflare from a beautiful GUI.**
 
-Workers · Pages · KV · D1 · R2 · Queues — browse, inspect, edit, and deploy without touching a terminal.
+Workers · Pages · KV · D1 · R2 · Queues · Vectorize · Hyperdrive · Workflows · AI — browse, inspect, edit, deploy, and even run models, without touching a terminal.
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-Observation-orange?logo=swift)
@@ -36,6 +36,16 @@ Every D1 database renders as an interactive ERD (drag & zoom) plus a table/colum
 Browse projects and deployments, manage secrets, and **create + deploy by dropping a folder, files, or a `.zip`**.
 
 ![Pages](docs/screenshots/pages.png)
+
+### AI Models — run inference in-app
+Browse the Workers AI catalog and open any model in a **playground** that posts to the Cloudflare AI API and shows the response.
+
+![AI Models playground](docs/screenshots/ai-playground.png)
+
+### Everything, at a glance
+Rich, readable detail views — here an R2 bucket with stat tiles, custom domains, CORS, lifecycle rules, and event notifications.
+
+![R2 bucket detail](docs/screenshots/r2-detail.png)
 
 ## Features
 
