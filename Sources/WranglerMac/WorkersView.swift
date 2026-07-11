@@ -66,7 +66,7 @@ struct WorkersView: View {
     @ViewBuilder private var content: some View {
         switch outcome {
         case .none:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingMatrix(caption: "LOADING WORKERS")
         case .rows(let workers):
             if workers.isEmpty {
                 ContentUnavailableView("No Workers", systemImage: "bolt.horizontal.circle",
@@ -466,16 +466,17 @@ struct DotMatrixLoader: View {
 struct LoadingMatrix: View {
     var caption: String = "Loading…"
     var tint: Color = Color(hex: 0xF6821F)
+    var cols: Int = 18
     var body: some View {
         VStack(spacing: 16) {
-            DotMatrixLoader(tint: tint)
+            DotMatrixLoader(cols: cols, tint: tint)
             Text(caption)
-                .font(.system(.callout, design: .monospaced))
+                .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .kerning(1)
+                .kerning(1.5)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 54)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 40)
     }
 }
 

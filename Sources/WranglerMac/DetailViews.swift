@@ -56,7 +56,7 @@ struct KVDetailView: View {
 
             switch loadState {
             case .loading:
-                Spacer(); ProgressView().controlSize(.small); Spacer()
+                LoadingMatrix(caption: "LOADING KEYS", tint: Color(hex: 0x2AA79B), cols: 10)
             case .failed(let msg):
                 Spacer()
                 ContentUnavailableView("Couldn’t load keys", systemImage: "exclamationmark.triangle",
@@ -312,7 +312,7 @@ struct D1DetailView: View {
 
     @ViewBuilder private var schemaView: some View {
         if loading {
-            ProgressView("Reading schema…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingMatrix(caption: "READING SCHEMA", tint: Color(hex: 0x7C5CFC))
         } else if let schemaError {
             ContentUnavailableView {
                 Label("Couldn’t read schema", systemImage: "exclamationmark.triangle")
@@ -609,7 +609,7 @@ struct D1QueryConsole: View {
 
     @ViewBuilder private var resultsPane: some View {
         if running {
-            ProgressView("Running…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingMatrix(caption: "RUNNING QUERY", tint: Color(hex: 0x7C5CFC))
         } else if let message {
             VStack(spacing: 10) {
                 Image(systemName: isError ? "xmark.octagon.fill" : "checkmark.seal.fill")
@@ -848,7 +848,7 @@ struct QueueDetailView: View {
                 header
                 GroupBox("Info") {
                     if loading {
-                        ProgressView().frame(maxWidth: .infinity).padding()
+                        LoadingMatrix(caption: "LOADING QUEUE", tint: Color(hex: 0x3A7BD5), cols: 12)
                     } else {
                         Text(info.isEmpty ? "No info returned." : info)
                             .font(.system(.callout, design: .monospaced))

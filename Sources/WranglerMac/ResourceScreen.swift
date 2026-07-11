@@ -14,6 +14,7 @@ struct ResourceScreen<Row: Identifiable & Hashable, RowView: View, Destination: 
     let title: String
     let systemImage: String
     var itemNoun: String = "item"
+    var accent: Color = Color(hex: 0xF6821F)
     let load: () async -> LoadOutcome<Row>
     @ViewBuilder let rowContent: (Row) -> RowView
     @ViewBuilder let destination: (Row) -> Destination
@@ -42,7 +43,7 @@ struct ResourceScreen<Row: Identifiable & Hashable, RowView: View, Destination: 
     @ViewBuilder private var content: some View {
         switch outcome {
         case .none:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingMatrix(caption: "LOADING \(title.uppercased())", tint: accent)
         case .rows(let rows):
             if rows.isEmpty {
                 ContentUnavailableView("No \(title)", systemImage: systemImage,

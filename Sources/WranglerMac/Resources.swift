@@ -52,7 +52,7 @@ struct KVView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         // `kv namespace list` emits JSON natively (and rejects --json).
-        ResourceScreen(title: "KV Namespaces", systemImage: "tablecells", itemNoun: "namespace") {
+        ResourceScreen(title: "KV Namespaces", systemImage: "tablecells", itemNoun: "namespace", accent: Color(hex: 0x2AA79B)) {
             await loadResource(model, args: ["kv", "namespace", "list"]) { out in
                 try JSONDecoder().decode([KVNamespace].self, from: WranglerCLI.extractJSON(from: out))
             }
@@ -69,7 +69,7 @@ struct D1View: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         // `d1 list` supports --json.
-        ResourceScreen(title: "D1 Databases", systemImage: "cylinder.split.1x2", itemNoun: "database") {
+        ResourceScreen(title: "D1 Databases", systemImage: "cylinder.split.1x2", itemNoun: "database", accent: Color(hex: 0x7C5CFC)) {
             await loadResource(model, args: ["d1", "list", "--json"]) { out in
                 try JSONDecoder().decode([D1Database].self, from: WranglerCLI.extractJSON(from: out))
             }
@@ -87,7 +87,7 @@ struct R2View: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         // `r2 bucket list` prints "name:" / "creation_date:" pairs (no JSON mode).
-        ResourceScreen(title: "R2 Buckets", systemImage: "externaldrive", itemNoun: "bucket") {
+        ResourceScreen(title: "R2 Buckets", systemImage: "externaldrive", itemNoun: "bucket", accent: Color(hex: 0xF6821F)) {
             await loadResource(model, args: ["r2", "bucket", "list"]) { out in
                 let buckets = parseR2Buckets(out)
                 if buckets.isEmpty { throw ResourceParseError.empty }
@@ -109,7 +109,7 @@ struct QueuesView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         // `queues list` prints a table (no JSON mode); empty accounts show only the banner.
-        ResourceScreen(title: "Queues", systemImage: "tray.full", itemNoun: "queue") {
+        ResourceScreen(title: "Queues", systemImage: "tray.full", itemNoun: "queue", accent: Color(hex: 0x3A7BD5)) {
             await loadResource(model, args: ["queues", "list"]) { out in
                 let queues = parseQueues(out)
                 if queues.isEmpty { throw ResourceParseError.empty }

@@ -32,7 +32,7 @@ struct ContentView: View {
 
     @ViewBuilder private var detail: some View {
         if model.checkingEnvironment {
-            ProgressView("Checking for wrangler…")
+            LoadingMatrix(caption: "CHECKING WRANGLER")
         } else if !model.binaryAvailable {
             MissingBinaryView()
         } else {
