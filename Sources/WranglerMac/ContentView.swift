@@ -19,6 +19,9 @@ struct ContentView: View {
                 Section("Platform") {
                     row(.workflows); row(.containers); row(.dispatch); row(.secretsStore)
                 }
+                Section("Networking & Security") {
+                    row(.tunnels); row(.vpc); row(.mtls); row(.turnstile); row(.aiSearch); row(.browser)
+                }
                 Section("Tools") {
                     row(.dev); row(.config); row(.logs); row(.console); row(.settings)
                 }
@@ -58,6 +61,12 @@ struct ContentView: View {
             case .containers: GenericResourceView(type: CFResources.containers)
             case .dispatch: GenericResourceView(type: CFResources.dispatch)
             case .secretsStore: GenericResourceView(type: CFResources.secretsStore)
+            case .aiSearch: GenericResourceView(type: CFResources.aiSearch)
+            case .browser: GenericResourceView(type: CFResources.browser)
+            case .tunnels: GenericResourceView(type: CFResources.tunnels)
+            case .vpc: GenericResourceView(type: CFResources.vpc)
+            case .mtls: GenericResourceView(type: CFResources.mtls)
+            case .turnstile: GenericResourceView(type: CFResources.turnstile)
             case .dev: DevRunnerView()
             case .config: ConfigEditorView()
             case .logs: TailView()

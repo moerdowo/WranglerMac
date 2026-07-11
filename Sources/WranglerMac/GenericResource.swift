@@ -72,7 +72,44 @@ enum CFResources {
         idKeys: ["name", "Name"], nameKeys: ["name", "Name"], subtitleKeys: ["task", "Task", "description"], badgeKey: nil,
         getArgs: nil, createArgs: nil, deleteArgs: nil)
 
-    static let all = [vectorize, hyperdrive, workflows, pipelines, containers, dispatch, secretsStore, aiModels]
+    static let aiSearch = CFResourceType(
+        key: "ai-search", name: "AI Search", icon: "magnifyingglass.circle.fill", tintHex: 0xF39C12, noun: "instance",
+        listArgs: ["ai-search", "list"], listJSON: false,
+        idKeys: ["name", "id"], nameKeys: ["name"], subtitleKeys: ["id", "source", "description"], badgeKey: nil,
+        getArgs: ["ai-search", "get"], createArgs: nil, deleteArgs: ["ai-search", "delete"])
+
+    static let browser = CFResourceType(
+        key: "browser", name: "Browser Sessions", icon: "globe", tintHex: 0x3A7BD5, noun: "session",
+        listArgs: ["browser", "list"], listJSON: false,
+        idKeys: ["sessionId", "id", "ID"], nameKeys: ["sessionId", "id"], subtitleKeys: ["startTime", "status"], badgeKey: "status",
+        getArgs: nil, createArgs: nil, deleteArgs: ["browser", "close"])
+
+    static let tunnels = CFResourceType(
+        key: "tunnels", name: "Tunnels", icon: "point.3.filled.connected.trianglepath.dotted", tintHex: 0xF6821F, noun: "tunnel",
+        listArgs: ["tunnel", "list"], listJSON: false,
+        idKeys: ["id", "ID"], nameKeys: ["name", "NAME", "Name"], subtitleKeys: ["id", "ID"], badgeKey: nil,
+        getArgs: ["tunnel", "info"], createArgs: ["tunnel", "create"], deleteArgs: ["tunnel", "delete"])
+
+    static let vpc = CFResourceType(
+        key: "vpc", name: "VPC Services", icon: "network", tintHex: 0x9B59B6, noun: "service",
+        listArgs: ["vpc", "service", "list"], listJSON: false,
+        idKeys: ["id", "ID"], nameKeys: ["name", "Name"], subtitleKeys: ["id", "type"], badgeKey: nil,
+        getArgs: ["vpc", "service", "get"], createArgs: nil, deleteArgs: nil)
+
+    static let mtls = CFResourceType(
+        key: "mtls", name: "mTLS Certificates", icon: "lock.badge.clock", tintHex: 0xE74C3C, noun: "certificate",
+        listArgs: ["mtls-certificate", "list"], listJSON: false,
+        idKeys: ["id", "ID"], nameKeys: ["name", "Name", "id"], subtitleKeys: ["id", "issuer", "expires_on"], badgeKey: nil,
+        getArgs: nil, createArgs: nil, deleteArgs: ["mtls-certificate", "delete"])
+
+    static let turnstile = CFResourceType(
+        key: "turnstile", name: "Turnstile", icon: "checkmark.shield.fill", tintHex: 0x2AA79B, noun: "widget",
+        listArgs: ["turnstile", "widget", "list"], listJSON: false,
+        idKeys: ["sitekey", "id"], nameKeys: ["name"], subtitleKeys: ["sitekey", "domains"], badgeKey: nil,
+        getArgs: ["turnstile", "widget", "get"], createArgs: nil, deleteArgs: ["turnstile", "widget", "delete"])
+
+    static let all = [vectorize, hyperdrive, workflows, pipelines, containers, dispatch, secretsStore, aiModels,
+                      aiSearch, browser, tunnels, vpc, mtls, turnstile]
     static func byKey(_ k: String) -> CFResourceType? { all.first { $0.key == k } }
 }
 
