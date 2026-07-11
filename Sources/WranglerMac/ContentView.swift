@@ -11,10 +11,10 @@ struct ContentView: View {
                     row(.account)
                 }
                 Section("Resources") {
-                    row(.kv); row(.d1); row(.r2); row(.queues)
+                    row(.workers); row(.kv); row(.d1); row(.r2); row(.queues)
                 }
                 Section("Tools") {
-                    row(.logs); row(.console); row(.settings)
+                    row(.dev); row(.config); row(.logs); row(.console); row(.settings)
                 }
             }
             .listStyle(.sidebar)
@@ -38,10 +38,13 @@ struct ContentView: View {
         } else {
             switch selection ?? .account {
             case .account: AccountView()
+            case .workers: WorkersView()
             case .kv: KVView()
             case .d1: D1View()
             case .r2: R2View()
             case .queues: QueuesView()
+            case .dev: DevRunnerView()
+            case .config: ConfigEditorView()
             case .logs: TailView()
             case .console: ConsoleView()
             case .settings: SettingsView()

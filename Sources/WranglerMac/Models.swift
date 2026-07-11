@@ -13,6 +13,12 @@ struct KVKey: Decodable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey { case name, expiration }
 }
 
+struct WorkerSecret: Decodable, Identifiable, Hashable {
+    let name: String
+    let type: String?
+    var id: String { name }
+}
+
 struct D1Database: Decodable, Identifiable, Hashable {
     let uuid: String
     let name: String
@@ -104,10 +110,13 @@ struct ConsoleEntry: Identifiable {
 /// Sidebar destinations.
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case account = "Account"
+    case workers = "Workers"
     case kv = "KV Namespaces"
     case d1 = "D1 Databases"
     case r2 = "R2 Buckets"
     case queues = "Queues"
+    case dev = "Dev Server"
+    case config = "Config Editor"
     case logs = "Live Logs"
     case console = "Console"
     case settings = "Settings"
@@ -117,10 +126,13 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .account: return "person.crop.circle"
+        case .workers: return "bolt.horizontal.circle"
         case .kv: return "tablecells"
         case .d1: return "cylinder.split.1x2"
         case .r2: return "externaldrive"
         case .queues: return "tray.full"
+        case .dev: return "play.rectangle"
+        case .config: return "doc.badge.gearshape"
         case .logs: return "waveform"
         case .console: return "terminal"
         case .settings: return "gearshape"

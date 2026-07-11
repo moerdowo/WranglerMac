@@ -131,9 +131,11 @@ actor WranglerCLI {
         "wrangler " + args.joined(separator: " ")
     }
 
-    /// Run wrangler to completion in an optional working directory.
+    /// Run wrangler to completion in an optional working directory. If `stdin`
+    /// is provided it is written to the process's standard input (used by
+    /// `secret put`, which reads the secret value from stdin).
     @discardableResult
-    func run(_ args: [String], cwd: String? = nil) async throws -> CLIResult {
+    func run(_ args: [String], cwd: String? = nil, stdin: String? = nil) async throws -> CLIResult {
         guard let (launch, lead) = resolveInvocation() else { throw CLIError.binaryNotFound }
         let display = displayCommand(args)
 
@@ -151,6 +153,8 @@ actor WranglerCLI {
         let outPipe = Pipe(), errPipe = Pipe()
         p.standardOutput = outPipe
         p.standardError = errPipe
+        let inPipe = stdin != nil ? Pipe() : nil
+        if let inPipe { p.standardInput = inPipe }
 
         return try await withCheckedThrowingContinuation { cont in
             p.terminationHandler = { proc in
@@ -158,7 +162,13 @@ actor WranglerCLI {
                 let e = String(decoding: errPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 cont.resume(returning: CLIResult(command: display, exitCode: proc.terminationStatus, stdout: o, stderr: e))
             }
-            do { try p.run() } catch { cont.resume(throwing: error) }
+            do {
+                try p.run()
+                if let inPipe, let stdin {
+                    inPipe.fileHandleForWriting.write(Data(stdin.utf8))
+                    try? inPipe.fileHandleForWriting.close()
+                }
+            } catch { cont.resume(throwing: error) }
         }
     }
 

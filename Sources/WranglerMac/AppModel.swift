@@ -24,11 +24,31 @@ final class AppModel {
         didSet { UserDefaults.standard.set(wranglerPath, forKey: "wranglerPath") }
     }
 
+    /// The account ID used for Cloudflare API calls (Workers list). Defaults to
+    /// the first account from whoami.
+    var selectedAccountID: String? {
+        didSet { UserDefaults.standard.set(selectedAccountID, forKey: "selectedAccountID") }
+    }
+
+    var accounts: [WhoAmIInfo.CFAccount] { WhoAmIInfo.parse(whoamiOutput).accounts }
+
+    var activeAccountID: String? {
+        selectedAccountID ?? accounts.first?.accountID
+    }
+
+    /// Return a non-expired OAuth token, refreshing via `wrangler whoami` if needed.
+    func freshToken() async -> String? {
+        if let info = CloudflareAPI.tokenInfo(), !info.expired { return info.token }
+        _ = await exec(["whoami"]) // forces wrangler to refresh the access token
+        return CloudflareAPI.tokenInfo()?.token
+    }
+
     private(set) var console: [ConsoleEntry] = []
 
     init() {
         projectDir = UserDefaults.standard.string(forKey: "projectDir") ?? ""
         wranglerPath = UserDefaults.standard.string(forKey: "wranglerPath") ?? ""
+        selectedAccountID = UserDefaults.standard.string(forKey: "selectedAccountID")
     }
 
     private func loadBundledRuntimeInfo() {
@@ -48,9 +68,9 @@ final class AppModel {
     /// Run a wrangler command, record it in the console, and return the result
     /// (a synthetic failure result if the process couldn't be launched).
     @discardableResult
-    func exec(_ args: [String]) async -> CLIResult {
+    func exec(_ args: [String], stdin: String? = nil) async -> CLIResult {
         do {
-            let r = try await WranglerCLI.shared.run(args, cwd: projectDir.nilIfEmpty)
+            let r = try await WranglerCLI.shared.run(args, cwd: projectDir.nilIfEmpty, stdin: stdin)
             record(r)
             return r
         } catch {
