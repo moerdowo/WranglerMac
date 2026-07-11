@@ -42,10 +42,14 @@ Browse projects and deployments, manage secrets, and **create + deploy by droppi
 - **Account** — sign in with Wrangler’s OAuth flow; multi-account switcher.
 - **Workers** — list all Workers (via the Cloudflare API); per-Worker overview, deployments & versions, rollback, environment secrets, cron triggers, inline live-logs tail, and delete.
 - **Pages** — projects & deployment history with production/preview + status badges; environment secrets; **drag‑and‑drop create & deploy** (folder / files / `.zip`); open the live site.
-- **KV** — browse namespaces and edit keys/values (add, edit, delete).
-- **D1** — visual **ERD diagram**, schema browser (tables, columns, PK/FK, relations), and a `--remote` SQL console with a results grid.
-- **R2** — browse buckets; get / put / delete objects by key.
-- **Queues** — list queues; view info; pause / resume / purge.
+- **KV** — browse namespaces and edit keys/values (add, edit, delete); bulk import from JSON.
+- **D1** — visual **ERD diagram**, schema browser (tables, columns, PK/FK, relations), a `--remote` SQL console, plus an Info tab (database info, Time Travel, `.sql` export).
+- **R2** — browse buckets; get / put / delete objects; manage public `r2.dev` access, custom domains, CORS, lifecycle rules, and event notifications.
+- **Queues** — list queues; view info; consumers & event subscriptions; pause / resume / purge.
+- **Data & AI** — **Vectorize** indexes, **Hyperdrive** configs, **Pipelines**, **Workers AI** model catalog, and **AI Search** instances.
+- **Platform** — **Workflows**, **Containers**, **Dispatch Namespaces** (Workers for Platforms), and the **Secrets Store**.
+- **Networking & Security** — **Tunnels**, **VPC Services**, **mTLS Certificates**, and **Turnstile** widgets.
+- **Create anything** — a `+` on each list scaffolds a new resource (KV/D1/R2/Queues/Workers, and more) with a tailored sheet.
 - **Dev Server** — managed `wrangler dev` with start/stop and ready-URL detection.
 - **Config Editor** — edit `wrangler.toml` / `.jsonc` / `.json` with validation and a cron-trigger builder.
 - **Live Logs** — streaming `wrangler tail` with filtering.
