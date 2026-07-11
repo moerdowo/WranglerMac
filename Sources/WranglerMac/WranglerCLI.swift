@@ -75,6 +75,20 @@ actor WranglerCLI {
         return npxInvocation()
     }
 
+    /// Resolve the working directory for a command. Wrangler reads/writes
+    /// `./.wrangler/cache`, so when there's no project directory we run inside a
+    /// writable app-owned folder rather than the launch cwd (which is `/` when
+    /// opened from Finder).
+    private nonisolated func effectiveCWD(_ cwd: String?) -> String {
+        if let cwd, !cwd.isEmpty { return cwd }
+        let fm = FileManager.default
+        let base = (fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()))
+            .appendingPathComponent("WranglerMac/work", isDirectory: true)
+        try? fm.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.path
+    }
+
     /// Ensure a bundled binary carries the executable bit (defensive — the copy
     /// build phase normally preserves it).
     private nonisolated func ensureExecutable(_ path: String) {
@@ -126,7 +140,7 @@ actor WranglerCLI {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: launch)
         p.arguments = lead + args
-        if let cwd, !cwd.isEmpty { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
+        p.currentDirectoryURL = URL(fileURLWithPath: effectiveCWD(cwd))
 
         var env = ProcessInfo.processInfo.environment
         env["WRANGLER_SEND_METRICS"] = "false"
@@ -176,7 +190,7 @@ actor WranglerCLI {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: launch)
         p.arguments = lead + args
-        if let cwd, !cwd.isEmpty { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
+        p.currentDirectoryURL = URL(fileURLWithPath: effectiveCWD(cwd))
 
         var env = ProcessInfo.processInfo.environment
         env["WRANGLER_SEND_METRICS"] = "false"
