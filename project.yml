@@ -11,13 +11,23 @@ settings:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
-    ENABLE_HARDENED_RUNTIME: YES
+    # Hardened runtime is off so the app can execute the bundled (unsigned) Node
+    # and workerd binaries locally. For notarized distribution, re-enable it and
+    # codesign the nested binaries with inherit entitlements.
+    ENABLE_HARDENED_RUNTIME: NO
 targets:
   WranglerMac:
     type: application
     platform: macOS
     sources:
-      - Sources/WranglerMac
+      - path: Sources/WranglerMac
+      # Self-contained Node + wrangler runtime, copied verbatim into the app's
+      # Resources (folder reference — not compiled). Generate with
+      # scripts/bundle-wrangler.sh.
+      - path: Runtime
+        buildPhase: resources
+        type: folder
+        optional: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.moerdowo.WranglerMac

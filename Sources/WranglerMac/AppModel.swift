@@ -9,6 +9,11 @@ final class AppModel {
     var whoamiOutput: String = ""
     var checkingEnvironment = true
 
+    /// Whether the app-bundled Node + wrangler runtime is being used.
+    var usingBundledRuntime = false
+    /// Human-readable bundled runtime versions, e.g. "node v24.18.0 · wrangler 4.110.0".
+    var bundledRuntimeInfo: String?
+
     /// Project directory used for `dev` / `deploy` / `tail` (they read wrangler.toml).
     var projectDir: String {
         didSet { UserDefaults.standard.set(projectDir, forKey: "projectDir") }
@@ -26,6 +31,20 @@ final class AppModel {
         wranglerPath = UserDefaults.standard.string(forKey: "wranglerPath") ?? ""
     }
 
+    private func loadBundledRuntimeInfo() {
+        let hasOverride = !wranglerPath.trimmingCharacters(in: .whitespaces).isEmpty
+        usingBundledRuntime = !hasOverride && WranglerCLI.shared.bundledRuntime != nil
+        guard let res = Bundle.main.resourceURL else { bundledRuntimeInfo = nil; return }
+        let url = res.appendingPathComponent("Runtime/runtime.json")
+        guard let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
+            bundledRuntimeInfo = nil; return
+        }
+        if let node = obj["node"], let wr = obj["wrangler"] {
+            bundledRuntimeInfo = "node \(node) · wrangler \(wr)"
+        }
+    }
+
     func record(_ r: CLIResult) {
         let out = r.stderr.isEmpty ? r.stdout : (r.stdout + (r.stdout.isEmpty ? "" : "\n") + r.stderr)
         console.insert(ConsoleEntry(command: r.command, output: out, ok: r.ok, date: Date()), at: 0)
@@ -35,6 +54,7 @@ final class AppModel {
     func refreshEnvironment() async {
         checkingEnvironment = true
         defer { checkingEnvironment = false }
+        loadBundledRuntimeInfo()
         binaryAvailable = await WranglerCLI.shared.isAvailable
         guard binaryAvailable else { version = "not found"; return }
         do {

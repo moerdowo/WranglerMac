@@ -6,13 +6,26 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Runtime") {
+                LabeledContent("Source") {
+                    Label(model.usingBundledRuntime ? "Bundled (self-contained)" : "System / override",
+                          systemImage: model.usingBundledRuntime ? "shippingbox.fill" : "externaldrive")
+                        .foregroundStyle(model.usingBundledRuntime ? .green : .secondary)
+                }
+                if let info = model.bundledRuntimeInfo {
+                    LabeledContent("Bundled", value: info)
+                }
+                Text("WranglerMac ships with its own Node.js and wrangler, so every feature works without installing anything. Set an override below to use your own wrangler instead.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("wrangler binary") {
                 LabeledContent("Status") {
                     Label(model.binaryAvailable ? "Found" : "Not found",
                           systemImage: model.binaryAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(model.binaryAvailable ? .green : .orange)
                 }
-                LabeledContent("Version", value: model.version.trimmingCharacters(in: .whitespacesAndNewlines))
+                LabeledContent("Active version", value: model.version.trimmingCharacters(in: .whitespacesAndNewlines))
 
                 TextField("Path override", text: Binding(
                     get: { model.wranglerPath },

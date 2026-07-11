@@ -35,14 +35,30 @@ actor WranglerCLI {
         UserDefaults.standard.string(forKey: "wranglerPath")?.trimmingCharacters(in: .whitespaces).nilIfEmpty
     }
 
+    /// Location of the app-bundled Node + wrangler runtime, if present.
+    nonisolated var bundledRuntime: (node: String, wranglerJS: String)? {
+        guard let res = Bundle.main.resourceURL else { return nil }
+        let base = res.appendingPathComponent("Runtime")
+        let node = base.appendingPathComponent("bin/node").path
+        let js = base.appendingPathComponent("node_modules/wrangler/bin/wrangler.js").path
+        guard FileManager.default.fileExists(atPath: node),
+              FileManager.default.fileExists(atPath: js) else { return nil }
+        return (node, js)
+    }
+
     /// Resolve how to invoke wrangler. Returns (launchPath, leadingArgs).
     private nonisolated func resolveInvocation() -> (String, [String])? {
-        // 1. Explicit override.
+        // 1. Explicit override always wins (lets power users point at their own).
         if let p = overridePath {
             if p == "npx" { return npxInvocation() }
             if FileManager.default.isExecutableFile(atPath: p) { return (p, []) }
         }
-        // 2. Common global install locations.
+        // 2. App-bundled runtime — the default, so everything works out of the box.
+        if let rt = bundledRuntime {
+            ensureExecutable(rt.node)
+            return (rt.node, [rt.wranglerJS])
+        }
+        // 3. Common global install locations.
         let candidates = [
             "/opt/homebrew/bin/wrangler",
             "/usr/local/bin/wrangler",
@@ -57,6 +73,14 @@ actor WranglerCLI {
         }
         // 4. Fall back to npx if node is around.
         return npxInvocation()
+    }
+
+    /// Ensure a bundled binary carries the executable bit (defensive — the copy
+    /// build phase normally preserves it).
+    private nonisolated func ensureExecutable(_ path: String) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: path), !fm.isExecutableFile(atPath: path) else { return }
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
     }
 
     private nonisolated func npxInvocation() -> (String, [String])? {
