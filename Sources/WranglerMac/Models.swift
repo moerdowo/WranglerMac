@@ -32,6 +32,58 @@ struct QueueInfo: Decodable, Identifiable, Hashable {
     var displayName: String { queue_name ?? queue_id ?? "queue" }
 }
 
+/// Structured view of `wrangler whoami` output.
+struct WhoAmIInfo {
+    var loggedIn: Bool
+    var email: String?
+    var authType: String?
+    var accounts: [CFAccount]
+
+    struct CFAccount: Identifiable, Hashable {
+        let name: String
+        let accountID: String
+        var id: String { accountID }
+    }
+
+    /// Empty / unknown state.
+    static let unknown = WhoAmIInfo(loggedIn: false, email: nil, authType: nil, accounts: [])
+
+    /// Best-effort parse of the human-readable `whoami` table output.
+    static func parse(_ output: String) -> WhoAmIInfo {
+        let lower = output.lowercased()
+        let loggedOut = lower.contains("not authenticated")
+            || lower.contains("not logged in")
+            || lower.contains("you are not")
+        var info = WhoAmIInfo.unknown
+
+        if let m = output.range(of: #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#,
+                                options: .regularExpression) {
+            info.email = String(output[m])
+        }
+        if lower.contains("oauth token") { info.authType = "OAuth Token" }
+        else if lower.contains("api token") { info.authType = "API Token" }
+        else if lower.contains("global api key") { info.authType = "Global API Key" }
+
+        // Parse the account table: data rows contain the │ (U+2502) cell divider.
+        for raw in output.split(separator: "\n") {
+            guard raw.contains("│") else { continue }
+            let cells = raw.split(separator: "│")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            guard cells.count >= 2 else { continue }
+            if cells[0].lowercased().contains("account name") { continue } // header row
+            let name = cells[0], id = cells[1]
+            let looksLikeID = id.range(of: #"^[0-9a-fA-F]{16,}$"#, options: .regularExpression) != nil
+            if looksLikeID || id.count >= 10 {
+                info.accounts.append(.init(name: name, accountID: id))
+            }
+        }
+
+        info.loggedIn = !loggedOut && (info.email != nil || !info.accounts.isEmpty || lower.contains("logged in"))
+        return info
+    }
+}
+
 /// A single command execution recorded for the Console / audit log.
 struct ConsoleEntry: Identifiable {
     let id = UUID()
