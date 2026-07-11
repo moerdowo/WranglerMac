@@ -85,6 +85,10 @@ Launch with `WRANGLERMAC_DEMO=1` to populate the UI with sample data (used for t
 WRANGLERMAC_DEMO=1 build/Build/Products/Debug/WranglerMac.app/Contents/MacOS/WranglerMac
 ```
 
+## Credits
+
+App icon from [Thiings](https://www.thiings.co/things).
+
 ---
 
 <div align="center">
