@@ -142,6 +142,7 @@ struct WorkerDetailView: View {
     @State private var deploymentsError: String?
     @State private var versionsError: String?
     @State private var secrets: [WorkerSecret] = []
+    @State private var didLoad = false
     @State private var busy = false
     @State private var status: String?
     @State private var confirmDelete = false
@@ -158,12 +159,16 @@ struct WorkerDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                overviewCard
-                secretsCard
-                deploymentsCard
-                versionsCard
-                logsCard
-                dangerZone
+                if !didLoad {
+                    LoadingMatrix(caption: "LOADING WORKER")
+                } else {
+                    overviewCard
+                    secretsCard
+                    deploymentsCard
+                    versionsCard
+                    logsCard
+                    dangerZone
+                }
                 if let status { Text(status).font(.callout).foregroundStyle(.secondary) }
             }
             .frame(maxWidth: 680).frame(maxWidth: .infinity)
@@ -339,6 +344,7 @@ struct WorkerDetailView: View {
         await loadDeployments()
         await loadVersions()
         await loadCrons()
+        didLoad = true
     }
 
     private func nameArgs(_ base: [String]) -> [String] { base + ["--name", script.id] }
@@ -417,6 +423,60 @@ struct WorkerDetailView: View {
     }
 
     private func stopTail() { tailHandle?.terminate(); tailHandle = nil; tailing = false }
+}
+
+// MARK: - Dot-matrix loader
+
+/// An animated LED dot-matrix loader: a brightness wave scans across a grid of
+/// dots. Purely decorative; drives itself off TimelineView.
+struct DotMatrixLoader: View {
+    var rows: Int = 5
+    var cols: Int = 18
+    var dot: CGFloat = 6
+    var spacing: CGFloat = 5
+    var tint: Color = Color(hex: 0xF6821F)
+    var speed: Double = 6
+
+    private var width: CGFloat { CGFloat(cols) * (dot + spacing) - spacing }
+    private var height: CGFloat { CGFloat(rows) * (dot + spacing) - spacing }
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, _ in
+                let step = dot + spacing
+                for r in 0..<rows {
+                    for c in 0..<cols {
+                        // Diagonal travelling wave gives a lively matrix shimmer.
+                        let wave = sin(t * speed - Double(c) * 0.55 - Double(r) * 0.25)
+                        let b = 0.14 + 0.86 * max(0, wave)
+                        let rect = CGRect(x: CGFloat(c) * step, y: CGFloat(r) * step, width: dot, height: dot)
+                        ctx.fill(Path(ellipseIn: rect), with: .color(tint.opacity(b)))
+                    }
+                }
+            }
+            .frame(width: width, height: height)
+        }
+        .frame(width: width, height: height)
+        .accessibilityLabel("Loading")
+    }
+}
+
+/// Centered dot-matrix loader with a monospaced caption.
+struct LoadingMatrix: View {
+    var caption: String = "Loading…"
+    var tint: Color = Color(hex: 0xF6821F)
+    var body: some View {
+        VStack(spacing: 16) {
+            DotMatrixLoader(tint: tint)
+            Text(caption)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .kerning(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 54)
+    }
 }
 
 // MARK: - Reusable section box
