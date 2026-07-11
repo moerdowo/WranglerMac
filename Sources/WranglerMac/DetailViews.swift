@@ -240,7 +240,327 @@ private struct AddKeySheet: View {
 
 // MARK: - D1 SQL console
 
-struct D1ConsoleView: View {
+// MARK: - D1 database detail (Schema + Query)
+
+struct DBColumn: Identifiable {
+    let name: String
+    let type: String
+    let notNull: Bool
+    let pk: Bool
+    let defaultValue: String?
+    var id: String { name }
+}
+
+struct DBForeignKey: Identifiable {
+    let from: String
+    let table: String
+    let to: String
+    var id: String { "\(from)->\(table).\(to)" }
+}
+
+struct DBTable: Identifiable {
+    let name: String
+    var columns: [DBColumn]
+    var foreignKeys: [DBForeignKey]
+    var createSQL: String?
+    var id: String { name }
+    /// Tables that reference this one (populated after all tables load).
+    var referencedBy: [String] = []
+}
+
+struct D1DetailView: View {
+    @Environment(AppModel.self) private var model
+    let database: D1Database
+
+    enum Mode: String, CaseIterable { case schema = "Schema", query = "Query" }
+    @State private var mode: Mode = .schema
+
+    @State private var tables: [DBTable] = []
+    @State private var selected: String?
+    @State private var schemaError: String?
+    @State private var loading = false
+    @State private var loaded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $mode) {
+                ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 260)
+            .padding(10)
+            Divider()
+
+            switch mode {
+            case .schema: schemaView
+            case .query: D1QueryConsole(database: database)
+            }
+        }
+        .navigationTitle(database.name)
+        .navigationSubtitle("D1 database")
+        .toolbar {
+            if mode == .schema {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { Task { await loadSchema() } } label: { Image(systemName: "arrow.clockwise") }
+                        .disabled(loading)
+                }
+            }
+        }
+        .task { if !loaded { await loadSchema() } }
+    }
+
+    @ViewBuilder private var schemaView: some View {
+        if loading {
+            ProgressView("Reading schema…").frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let schemaError {
+            ContentUnavailableView {
+                Label("Couldn’t read schema", systemImage: "exclamationmark.triangle")
+            } description: { Text(schemaError).font(.callout) } actions: {
+                Button("Retry") { Task { await loadSchema() } }.buttonStyle(.borderedProminent)
+            }
+        } else if tables.isEmpty {
+            ContentUnavailableView("No tables", systemImage: "tablecells",
+                                   description: Text("This database has no user tables."))
+        } else {
+            HSplitView {
+                tableList.frame(minWidth: 190, idealWidth: 220, maxWidth: 300)
+                if let t = tables.first(where: { $0.name == selected }) ?? tables.first {
+                    D1TableDetail(table: t)
+                } else {
+                    Color.clear
+                }
+            }
+        }
+    }
+
+    private var tableList: some View {
+        List(selection: $selected) {
+            Section("\(tables.count) tables") {
+                ForEach(tables) { t in
+                    HStack(spacing: 8) {
+                        Image(systemName: "tablecells").foregroundStyle(Color(hex: 0x7C5CFC))
+                        Text(t.name).lineLimit(1)
+                        Spacer()
+                        if !t.foreignKeys.isEmpty {
+                            Image(systemName: "link").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Text("\(t.columns.count)").font(.caption).foregroundStyle(.tertiary)
+                    }
+                    .tag(t.name)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    // MARK: Schema loading
+
+    /// Run a D1 command and return one dict-array per statement result set.
+    private func runD1(_ sql: String) async -> (sets: [[[String: Any]]]?, error: String?) {
+        let r = await model.exec(["d1", "execute", database.name, "--remote", "--json", "--command", sql])
+        guard r.ok else { return (nil, stripANSI(r.stderr.nilIfEmpty ?? r.stdout)) }
+        let data = WranglerCLI.extractJSON(from: r.stdout)
+        guard let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return (nil, "Unexpected output from D1.")
+        }
+        return (arr.map { ($0["results"] as? [[String: Any]]) ?? [] }, nil)
+    }
+
+    private func loadSchema() async {
+        loading = true; defer { loading = false; loaded = true }
+        schemaError = nil
+
+        let listSQL = "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name"
+        let (listSets, listErr) = await runD1(listSQL)
+        if let listErr { schemaError = listErr; return }
+        guard let first = listSets?.first else { schemaError = "No result."; return }
+
+        let meta: [(name: String, sql: String?)] = first.compactMap { row in
+            guard let name = row["name"] as? String else { return nil }
+            return (name, row["sql"] as? String)
+        }
+        if meta.isEmpty { tables = []; return }
+
+        // Batch PRAGMA table_info + foreign_key_list for every table.
+        let pragma = meta.map { m -> String in
+            let q = m.name.replacingOccurrences(of: "\"", with: "\"\"")
+            return "PRAGMA table_info(\"\(q)\"); PRAGMA foreign_key_list(\"\(q)\");"
+        }.joined(separator: " ")
+        let (pragmaSets, _) = await runD1(pragma)
+
+        var built: [DBTable] = []
+        for (i, m) in meta.enumerated() {
+            var columns: [DBColumn] = []
+            var fks: [DBForeignKey] = []
+            if let sets = pragmaSets, sets.count >= 2 * i + 2 {
+                columns = sets[2 * i].map { row in
+                    DBColumn(name: row["name"] as? String ?? "?",
+                             type: (row["type"] as? String ?? "").uppercased(),
+                             notNull: asInt(row["notnull"]) == 1,
+                             pk: asInt(row["pk"]) > 0,
+                             defaultValue: row["dflt_value"] as? String)
+                }
+                fks = sets[2 * i + 1].map { row in
+                    DBForeignKey(from: row["from"] as? String ?? "?",
+                                 table: row["table"] as? String ?? "?",
+                                 to: row["to"] as? String ?? "?")
+                }
+            }
+            built.append(DBTable(name: m.name, columns: columns, foreignKeys: fks, createSQL: m.sql))
+        }
+
+        // Reverse relations: who references each table.
+        for i in built.indices {
+            let name = built[i].name
+            built[i].referencedBy = built
+                .filter { $0.foreignKeys.contains { $0.table == name } }
+                .map { $0.name }
+        }
+
+        tables = built
+        if selected == nil { selected = built.first?.name }
+    }
+
+    private func asInt(_ v: Any?) -> Int {
+        if let n = v as? NSNumber { return n.intValue }
+        if let s = v as? String { return Int(s) ?? 0 }
+        return 0
+    }
+}
+
+struct D1TableDetail: View {
+    let table: DBTable
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(hex: 0x9B7CFC), Color(hex: 0x7C5CFC)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 44, height: 44)
+                        .overlay(Image(systemName: "tablecells").foregroundStyle(.white).font(.title3))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(table.name).font(.title2).bold().textSelection(.enabled)
+                        Text("^[\(table.columns.count) column](inflect: true) · ^[\(table.foreignKeys.count) relation](inflect: true)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                columnsSection
+                if !table.foreignKeys.isEmpty { relationsSection }
+                if !table.referencedBy.isEmpty { referencedBySection }
+                if let sql = table.createSQL, !sql.isEmpty { createSection(sql) }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var columnsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Columns").font(.headline).padding(.bottom, 8)
+            ForEach(Array(table.columns.enumerated()), id: \.element.id) { idx, col in
+                HStack(spacing: 10) {
+                    Image(systemName: col.pk ? "key.fill" : (isFK(col.name) ? "link" : "circle.dashed"))
+                        .foregroundStyle(col.pk ? Color.yellow : (isFK(col.name) ? Color(hex: 0x3A7BD5) : Color.secondary.opacity(0.5)))
+                        .font(.caption).frame(width: 16)
+                    Text(col.name).font(.system(.callout, design: .monospaced)).fontWeight(col.pk ? .semibold : .regular)
+                    Spacer()
+                    if !col.defaultValue.isNilOrEmpty {
+                        Text("default \(col.defaultValue!)").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    if col.notNull && !col.pk {
+                        Text("NOT NULL").font(.caption2).foregroundStyle(.orange)
+                    }
+                    if !col.type.isEmpty {
+                        Text(col.type).font(.system(.caption2, design: .monospaced))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(.quaternary.opacity(0.6), in: Capsule())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 7)
+                if idx < table.columns.count - 1 { Divider() }
+            }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.separator))
+    }
+
+    private var relationsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Foreign keys", systemImage: "arrow.right.circle").font(.headline)
+            ForEach(table.foreignKeys) { fk in
+                HStack(spacing: 6) {
+                    Text(fk.from).font(.system(.callout, design: .monospaced)).foregroundStyle(Color(hex: 0x3A7BD5))
+                    Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
+                    Text("\(fk.table).\(fk.to)").font(.system(.callout, design: .monospaced))
+                    Spacer()
+                }
+                .padding(.vertical, 3)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0x3A7BD5).opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var referencedBySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Referenced by", systemImage: "arrow.left.circle").font(.headline)
+            FlowText(items: table.referencedBy)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func createSection(_ sql: String) -> some View {
+        DisclosureGroup("CREATE statement") {
+            Text(sql).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func isFK(_ column: String) -> Bool { table.foreignKeys.contains { $0.from == column } }
+}
+
+/// Wrapping row of small pills.
+struct FlowText: View {
+    let items: [String]
+    var body: some View {
+        WrapHStack(items: items) { name in
+            Text(name).font(.system(.caption, design: .monospaced))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+        }
+    }
+}
+
+/// Minimal wrapping HStack.
+struct WrapHStack<Content: View>: View {
+    let items: [String]
+    @ViewBuilder let content: (String) -> Content
+    var body: some View {
+        // Simple flow using a LazyVGrid of adaptive columns.
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+            ForEach(items, id: \.self) { content($0) }
+        }
+    }
+}
+
+extension Optional where Wrapped == String {
+    var isNilOrEmpty: Bool { self?.isEmpty ?? true }
+}
+
+struct D1QueryConsole: View {
     @Environment(AppModel.self) private var model
     let database: D1Database
 
@@ -257,8 +577,6 @@ struct D1ConsoleView: View {
             Divider()
             resultsPane
         }
-        .navigationTitle(database.name)
-        .navigationSubtitle("D1 database")
     }
 
     private var editorPane: some View {

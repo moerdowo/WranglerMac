@@ -78,7 +78,7 @@ struct D1View: View {
                          title: db.name, subtitle: db.uuid,
                          badge: db.version, copyValue: db.uuid)
         } destination: { db in
-            D1ConsoleView(database: db)
+            D1DetailView(database: db)
         }
     }
 }
