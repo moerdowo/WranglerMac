@@ -4,7 +4,7 @@
 
 # WranglerMac
 
-**A native macOS app for managing Cloudflare from a beautiful GUI — powered by the Wrangler CLI.**
+**A native macOS app for managing Cloudflare from a beautiful GUI.**
 
 Workers · Pages · KV · D1 · R2 · Queues — browse, inspect, edit, and deploy without touching a terminal.
 
