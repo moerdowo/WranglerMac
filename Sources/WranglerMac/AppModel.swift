@@ -45,6 +45,22 @@ final class AppModel {
         }
     }
 
+    /// Run a wrangler command, record it in the console, and return the result
+    /// (a synthetic failure result if the process couldn't be launched).
+    @discardableResult
+    func exec(_ args: [String]) async -> CLIResult {
+        do {
+            let r = try await WranglerCLI.shared.run(args, cwd: projectDir.nilIfEmpty)
+            record(r)
+            return r
+        } catch {
+            let r = CLIResult(command: "wrangler " + args.joined(separator: " "),
+                              exitCode: -1, stdout: "", stderr: error.localizedDescription)
+            record(r)
+            return r
+        }
+    }
+
     func record(_ r: CLIResult) {
         let out = r.stderr.isEmpty ? r.stdout : (r.stdout + (r.stdout.isEmpty ? "" : "\n") + r.stderr)
         console.insert(ConsoleEntry(command: r.command, output: out, ok: r.ok, date: Date()), at: 0)

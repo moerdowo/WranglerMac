@@ -5,6 +5,14 @@ struct KVNamespace: Decodable, Identifiable, Hashable {
     let title: String
 }
 
+struct KVKey: Decodable, Identifiable, Hashable {
+    let name: String
+    let expiration: Int?
+    var id: String { name }
+
+    enum CodingKeys: String, CodingKey { case name, expiration }
+}
+
 struct D1Database: Decodable, Identifiable, Hashable {
     let uuid: String
     let name: String

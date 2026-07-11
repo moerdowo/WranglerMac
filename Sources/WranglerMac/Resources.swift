@@ -59,6 +59,8 @@ struct KVView: View {
         } rowContent: { ns in
             ResourceCard(icon: "tablecells", tint: Color(hex: 0x2AA79B),
                          title: ns.title, subtitle: ns.id, copyValue: ns.id)
+        } destination: { ns in
+            KVDetailView(namespace: ns)
         }
     }
 }
@@ -75,6 +77,8 @@ struct D1View: View {
             ResourceCard(icon: "cylinder.split.1x2", tint: Color(hex: 0x7C5CFC),
                          title: db.name, subtitle: db.uuid,
                          badge: db.version, copyValue: db.uuid)
+        } destination: { db in
+            D1ConsoleView(database: db)
         }
     }
 }
@@ -95,6 +99,8 @@ struct R2View: View {
                          subtitle: bucket.creation_date.map(prettyDate),
                          monospacedSubtitle: false,
                          copyValue: bucket.name)
+        } destination: { bucket in
+            R2DetailView(bucket: bucket)
         }
     }
 }
@@ -113,6 +119,8 @@ struct QueuesView: View {
             ResourceCard(icon: "tray.full.fill", tint: Color(hex: 0x3A7BD5),
                          title: q.displayName, subtitle: q.queue_id,
                          copyValue: q.queue_id)
+        } destination: { q in
+            QueueDetailView(queueName: q.displayName)
         }
     }
 }

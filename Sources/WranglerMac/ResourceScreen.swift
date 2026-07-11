@@ -9,50 +9,57 @@ enum LoadOutcome<Row> {
 }
 
 /// Generic scrollable, card-based list screen backed by an async wrangler command.
-struct ResourceScreen<Row: Identifiable, RowView: View>: View {
+/// Each card pushes a `destination` detail view within the screen's NavigationStack.
+struct ResourceScreen<Row: Identifiable & Hashable, RowView: View, Destination: View>: View {
     let title: String
     let systemImage: String
     var itemNoun: String = "item"
     let load: () async -> LoadOutcome<Row>
     @ViewBuilder let rowContent: (Row) -> RowView
+    @ViewBuilder let destination: (Row) -> Destination
 
     @State private var outcome: LoadOutcome<Row>?
     @State private var loading = false
 
     var body: some View {
-        Group {
-            switch outcome {
-            case .none:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .rows(let rows):
-                if rows.isEmpty {
-                    ContentUnavailableView("No \(title)", systemImage: systemImage,
-                                           description: Text("Nothing here yet, or your account has none."))
-                } else {
-                    cardList(rows)
+        NavigationStack {
+            content
+                .background(.background)
+                .navigationTitle(title)
+                .navigationDestination(for: Row.self) { destination($0) }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { Task { await reload() } } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(loading)
+                    }
                 }
-            case .raw(let text):
-                RawOutputView(text: text)
-            case .failure(let msg):
-                ContentUnavailableView {
-                    Label("Couldn’t load \(title)", systemImage: "exclamationmark.triangle")
-                } description: {
-                    ScrollView { Text(msg).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
-                        .frame(maxHeight: 220)
-                }
+                .task { if outcome == nil { await reload() } }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch outcome {
+        case .none:
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .rows(let rows):
+            if rows.isEmpty {
+                ContentUnavailableView("No \(title)", systemImage: systemImage,
+                                       description: Text("Nothing here yet, or your account has none."))
+            } else {
+                cardList(rows)
+            }
+        case .raw(let text):
+            RawOutputView(text: text)
+        case .failure(let msg):
+            ContentUnavailableView {
+                Label("Couldn’t load \(title)", systemImage: "exclamationmark.triangle")
+            } description: {
+                ScrollView { Text(msg).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+                    .frame(maxHeight: 220)
             }
         }
-        .background(.background)
-        .navigationTitle(title)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { Task { await reload() } } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(loading)
-            }
-        }
-        .task { if outcome == nil { await reload() } }
     }
 
     private func cardList(_ rows: [Row]) -> some View {
@@ -67,7 +74,10 @@ struct ResourceScreen<Row: Identifiable, RowView: View>: View {
                 }
                 .padding(.bottom, 2)
 
-                ForEach(rows) { rowContent($0) }
+                ForEach(rows) { row in
+                    NavigationLink(value: row) { rowContent(row) }
+                        .buttonStyle(.plain)
+                }
             }
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
