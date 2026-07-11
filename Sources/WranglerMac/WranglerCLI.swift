@@ -124,7 +124,7 @@ actor WranglerCLI {
         } catch { return nil }
     }
 
-    var isAvailable: Bool { resolveInvocation() != nil }
+    var isAvailable: Bool { DemoMode.on || resolveInvocation() != nil }
 
     /// Human-readable command string for the console/audit log.
     private func displayCommand(_ args: [String]) -> String {
@@ -136,6 +136,7 @@ actor WranglerCLI {
     /// `secret put`, which reads the secret value from stdin).
     @discardableResult
     func run(_ args: [String], cwd: String? = nil, stdin: String? = nil) async throws -> CLIResult {
+        if DemoMode.on { return DemoData.result(for: args) }
         guard let (launch, lead) = resolveInvocation() else { throw CLIError.binaryNotFound }
         let display = displayCommand(args)
 

@@ -136,19 +136,27 @@ enum CloudflareAPI {
     }
 
     static func listWorkers(account: String, token: String) async throws -> [WorkerScript] {
-        try await getList("/accounts/\(account)/workers/scripts", token: token, as: WorkerScript.self)
+        if DemoMode.on { return decode(DemoData.workersJSON) }
+        return try await getList("/accounts/\(account)/workers/scripts", token: token, as: WorkerScript.self)
+    }
+
+    private static func decode<T: Decodable>(_ json: String) -> [T] {
+        (try? JSONDecoder().decode([T].self, from: Data(json.utf8))) ?? []
     }
 
     static func listPagesProjects(account: String, token: String) async throws -> [PagesProject] {
-        try await getList("/accounts/\(account)/pages/projects", token: token, as: PagesProject.self)
+        if DemoMode.on { return decode(DemoData.pagesJSON) }
+        return try await getList("/accounts/\(account)/pages/projects", token: token, as: PagesProject.self)
     }
 
     static func pagesDeployments(account: String, project: String, token: String) async throws -> [PagesDeployment] {
-        try await getList("/accounts/\(account)/pages/projects/\(project)/deployments", token: token, as: PagesDeployment.self)
+        if DemoMode.on { return decode(DemoData.pagesDeploymentsJSON) }
+        return try await getList("/accounts/\(account)/pages/projects/\(project)/deployments", token: token, as: PagesDeployment.self)
     }
 
     /// Cron triggers for a Worker. Returns the raw cron expressions.
     static func schedules(account: String, script: String, token: String) async throws -> [String] {
+        if DemoMode.on { return ["*/15 * * * *"] }
         struct Schedule: Decodable { let cron: String? }
         let list = try await getList("/accounts/\(account)/workers/scripts/\(script)/schedules",
                                      token: token, as: Schedule.self)

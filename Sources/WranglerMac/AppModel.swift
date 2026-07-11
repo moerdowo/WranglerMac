@@ -38,6 +38,7 @@ final class AppModel {
 
     /// Return a non-expired OAuth token, refreshing via `wrangler whoami` if needed.
     func freshToken() async -> String? {
+        if DemoMode.on { return "demo-token" }
         if let info = CloudflareAPI.tokenInfo(), !info.expired { return info.token }
         _ = await exec(["whoami"]) // forces wrangler to refresh the access token
         return CloudflareAPI.tokenInfo()?.token
