@@ -11,7 +11,7 @@ struct ContentView: View {
                     row(.account)
                 }
                 Section("Resources") {
-                    row(.workers); row(.kv); row(.d1); row(.r2); row(.queues)
+                    row(.workers); row(.pages); row(.kv); row(.d1); row(.r2); row(.queues)
                 }
                 Section("Tools") {
                     row(.dev); row(.config); row(.logs); row(.console); row(.settings)
@@ -39,6 +39,7 @@ struct ContentView: View {
             switch selection ?? .account {
             case .account: AccountView()
             case .workers: WorkersView()
+            case .pages: PagesView()
             case .kv: KVView()
             case .d1: D1View()
             case .r2: R2View()

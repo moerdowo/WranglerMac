@@ -10,6 +10,59 @@ struct WorkerScript: Decodable, Identifiable, Hashable {
     let usage_model: String?
 }
 
+/// A Cloudflare Pages project (from the account pages/projects endpoint).
+struct PagesProject: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let subdomain: String?
+    let domains: [String]?
+    let created_on: String?
+    let production_branch: String?
+    let framework: String?
+    let uses_functions: Bool?
+    let latest_deployment: PagesDeployment?
+    let source: PagesSource?
+
+    var liveURL: URL? { subdomain.flatMap { URL(string: "https://\($0)") } }
+    var gitDescription: String? {
+        guard let s = source, let c = s.config, let owner = c.owner, let repo = c.repo_name else { return nil }
+        return "\(owner)/\(repo)"
+    }
+}
+
+struct PagesSource: Decodable, Hashable {
+    let type: String?
+    let config: Config?
+    struct Config: Decodable, Hashable {
+        let owner: String?
+        let repo_name: String?
+        let production_branch: String?
+    }
+}
+
+struct PagesDeployment: Decodable, Identifiable, Hashable {
+    let id: String
+    let short_id: String?
+    let environment: String?
+    let url: String?
+    let created_on: String?
+    let latest_stage: Stage?
+    let deployment_trigger: Trigger?
+
+    struct Stage: Decodable, Hashable { let name: String?; let status: String? }
+    struct Trigger: Decodable, Hashable {
+        let metadata: Meta?
+        struct Meta: Decodable, Hashable {
+            let branch: String?
+            let commit_hash: String?
+            let commit_message: String?
+        }
+    }
+    var status: String? { latest_stage?.status }
+    var branch: String? { deployment_trigger?.metadata?.branch }
+    var commitMessage: String? { deployment_trigger?.metadata?.commit_message }
+}
+
 private struct CFListResponse<T: Decodable>: Decodable {
     let result: [T]?
     let success: Bool
@@ -84,6 +137,14 @@ enum CloudflareAPI {
 
     static func listWorkers(account: String, token: String) async throws -> [WorkerScript] {
         try await getList("/accounts/\(account)/workers/scripts", token: token, as: WorkerScript.self)
+    }
+
+    static func listPagesProjects(account: String, token: String) async throws -> [PagesProject] {
+        try await getList("/accounts/\(account)/pages/projects", token: token, as: PagesProject.self)
+    }
+
+    static func pagesDeployments(account: String, project: String, token: String) async throws -> [PagesDeployment] {
+        try await getList("/accounts/\(account)/pages/projects/\(project)/deployments", token: token, as: PagesDeployment.self)
     }
 
     /// Cron triggers for a Worker. Returns the raw cron expressions.

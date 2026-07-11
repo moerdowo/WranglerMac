@@ -143,6 +143,7 @@ struct ConsoleEntry: Identifiable {
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case account = "Account"
     case workers = "Workers"
+    case pages = "Pages"
     case kv = "KV Namespaces"
     case d1 = "D1 Databases"
     case r2 = "R2 Buckets"
@@ -159,6 +160,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .account: return "person.crop.circle"
         case .workers: return "bolt.horizontal.circle"
+        case .pages: return "doc.richtext"
         case .kv: return "tablecells"
         case .d1: return "cylinder.split.1x2"
         case .r2: return "externaldrive"
