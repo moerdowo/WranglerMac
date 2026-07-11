@@ -11,3 +11,6 @@ WranglerMac.xcodeproj
 
 # Bundled Node + wrangler runtime (regenerate with scripts/bundle-wrangler.sh)
 /Runtime/
+
+build-release/
+*.dmg
