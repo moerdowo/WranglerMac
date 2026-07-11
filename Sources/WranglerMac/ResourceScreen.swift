@@ -15,12 +15,14 @@ struct ResourceScreen<Row: Identifiable & Hashable, RowView: View, Destination: 
     let systemImage: String
     var itemNoun: String = "item"
     var accent: Color = Color(hex: 0xF6821F)
+    var createKind: ResourceKind? = nil
     let load: () async -> LoadOutcome<Row>
     @ViewBuilder let rowContent: (Row) -> RowView
     @ViewBuilder let destination: (Row) -> Destination
 
     @State private var outcome: LoadOutcome<Row>?
     @State private var loading = false
+    @State private var showCreate = false
 
     var body: some View {
         NavigationStack {
@@ -29,11 +31,25 @@ struct ResourceScreen<Row: Identifiable & Hashable, RowView: View, Destination: 
                 .navigationTitle(title)
                 .navigationDestination(for: Row.self) { destination($0) }
                 .toolbar {
+                    if let createKind {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { showCreate = true } label: { Label("New", systemImage: "plus") }
+                                .help("Create \(title)")
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button { Task { await reload() } } label: {
                             Image(systemName: "arrow.clockwise")
                         }
                         .disabled(loading)
+                    }
+                }
+                .sheet(isPresented: $showCreate) {
+                    if let createKind {
+                        CreateResourceSheet(kind: createKind) { success in
+                            showCreate = false
+                            if success { Task { await reload() } }
+                        }
                     }
                 }
                 .task { if outcome == nil { await reload() } }

@@ -34,6 +34,7 @@ struct WorkersView: View {
     @Environment(AppModel.self) private var model
     @State private var outcome: LoadOutcome<WorkerScript>?
     @State private var loading = false
+    @State private var showCreate = false
 
     var body: some View {
         NavigationStack {
@@ -46,8 +47,17 @@ struct WorkersView: View {
                         ToolbarItem(placement: .automatic) { accountPicker }
                     }
                     ToolbarItem(placement: .primaryAction) {
+                        Button { showCreate = true } label: { Label("New Worker", systemImage: "plus") }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
                         Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }
                             .disabled(loading)
+                    }
+                }
+                .sheet(isPresented: $showCreate) {
+                    CreateResourceSheet(kind: .worker) { success in
+                        showCreate = false
+                        if success { Task { await reload() } }
                     }
                 }
                 .task { if outcome == nil { await reload() } }
