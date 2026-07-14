@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct WranglerMacApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
 
     var body: some Scene {
@@ -14,6 +15,17 @@ struct WranglerMacApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { UpdaterManager.shared.checkForUpdates() }
+            }
         }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let updaterManager = UpdaterManager.shared
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        updaterManager.start()
     }
 }

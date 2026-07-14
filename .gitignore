@@ -14,3 +14,8 @@ WranglerMac.xcodeproj
 
 build-release/
 *.dmg
+
+# installed agent skills (local)
+.agents/
+.claude/
+skills-lock.json

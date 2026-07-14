@@ -4,10 +4,14 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
 settings:
   base:
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
@@ -38,9 +42,14 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: WranglerMac
         COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - package: Sparkle
     info:
       path: Sources/WranglerMac/Info.plist
       properties:
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: ""
         LSApplicationCategoryType: "public.app-category.developer-tools"
+        SUFeedURL: "https://raw.githubusercontent.com/moerdowo/WranglerMac/main/appcast.xml"
+        SUPublicEDKey: "8P15E4/GqpXPmMZ3uUaF7PXYHhiFBLN7DdeLVFtRGOA="
+        SUEnableInstallerLauncherService: true

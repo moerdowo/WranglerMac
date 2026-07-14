@@ -24,5 +24,11 @@
 	<string>14.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/moerdowo/WranglerMac/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>8P15E4/GqpXPmMZ3uUaF7PXYHhiFBLN7DdeLVFtRGOA=</string>
 </dict>
 </plist>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>WranglerMac</title>
+    <description>Most recent changes for WranglerMac.</description>
+    <language>en</language>
+    <item>
+      <title>Version 1.1.0</title>
+      <pubDate>Tue, 14 Jul 2026 08:29:14 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Sparkle in-app auto-updates (Check for Updates in the app menu and Settings).</li>
+          <li>All prior features: Workers, Pages, KV, D1 (ERD), R2, Queues, Vectorize, Hyperdrive, Workflows, AI model playground, and more.</li>
+        </ul>
+      ]]></description>
+      <enclosure url="https://github.com/moerdowo/WranglerMac/releases/download/v1.1.0/WranglerMac-1.1.0.dmg"
+                 type="application/octet-stream"
+                 sparkle:edSignature="FoSzxbogj84zLDX1dwNzwUO9c/CWZrN4HuPTQ6LqtDlQm86MUiiQePTFzSoYYLaRn2r+luhECE1m7dM5L6ddDQ=="
+                 length="123073662" />
+    </item>
+  </channel>
+</rss>

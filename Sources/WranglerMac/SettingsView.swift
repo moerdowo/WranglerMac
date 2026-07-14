@@ -3,9 +3,25 @@ import AppKit
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @ObservedObject private var updater = UpdaterManager.shared
+
+    private var appVersion: String {
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(v) (\(b))"
+    }
 
     var body: some View {
         Form {
+            Section("Updates") {
+                LabeledContent("Version", value: appVersion)
+                Toggle("Automatically check for updates", isOn: Binding(
+                    get: { updater.automaticallyChecksForUpdates },
+                    set: { updater.automaticallyChecksForUpdates = $0 }))
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
+
             Section("Runtime") {
                 LabeledContent("Source") {
                     Label(model.usingBundledRuntime ? "Bundled (self-contained)" : "System / override",
