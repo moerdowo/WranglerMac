@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let updaterManager = UpdaterManager.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ignore SIGPIPE so a broken pipe when writing to a wrangler subprocess's
+        // stdin surfaces as an error rather than killing the app.
+        signal(SIGPIPE, SIG_IGN)
         updaterManager.start()
     }
 }

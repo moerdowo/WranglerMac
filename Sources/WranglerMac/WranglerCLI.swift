@@ -158,15 +158,29 @@ actor WranglerCLI {
         if let inPipe { p.standardInput = inPipe }
 
         return try await withCheckedThrowingContinuation { cont in
+            // Drain stdout/stderr on background threads *while the process runs*, so
+            // output larger than the OS pipe buffer (64KB) can't block the child and
+            // deadlock the wait (e.g. large `kv key list` / `d1 execute --json`).
+            let outBox = DataBox(), errBox = DataBox()
+            let group = DispatchGroup()
+            group.enter()
+            DispatchQueue.global().async { outBox.data = outPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+            group.enter()
+            DispatchQueue.global().async { errBox.data = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+
             p.terminationHandler = { proc in
-                let o = String(decoding: outPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                let e = String(decoding: errPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                cont.resume(returning: CLIResult(command: display, exitCode: proc.terminationStatus, stdout: o, stderr: e))
+                group.wait() // both reads reach EOF once the process closes its pipes
+                cont.resume(returning: CLIResult(command: display, exitCode: proc.terminationStatus,
+                                                 stdout: String(decoding: outBox.data, as: UTF8.self),
+                                                 stderr: String(decoding: errBox.data, as: UTF8.self)))
             }
             do {
                 try p.run()
                 if let inPipe, let stdin {
-                    inPipe.fileHandleForWriting.write(Data(stdin.utf8))
+                    // Throwing write + close so a broken pipe (process exited before
+                    // reading stdin, e.g. `secret put` on a bad name) surfaces as an
+                    // error instead of an uncaught NSException / SIGPIPE crash.
+                    try? inPipe.fileHandleForWriting.write(contentsOf: Data(stdin.utf8))
                     try? inPipe.fileHandleForWriting.close()
                 }
             } catch { cont.resume(throwing: error) }
@@ -230,7 +244,13 @@ actor WranglerCLI {
     }
 }
 
-/// Handle to a running streaming process.
+/// A mutable byte buffer filled on a background read thread and consumed after a
+/// DispatchGroup barrier — the barrier provides the happens-before, so unchecked.
+final class DataBox: @unchecked Sendable { var data = Data() }
+
+/// Handle to a running streaming process. `@unchecked Sendable`: the wrapped
+/// `Process` is owned solely by the reader; only `terminate()`/`isRunning` cross
+/// threads and both are safe on a Foundation `Process`.
 final class StreamHandle: @unchecked Sendable {
     private let process: Process
     init(process: Process) { self.process = process }

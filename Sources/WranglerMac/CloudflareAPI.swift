@@ -122,12 +122,21 @@ enum CloudflareAPI {
 
     /// GET a list endpoint and return its `result` array.
     static func getList<T: Decodable>(_ path: String, token: String, as: T.Type) async throws -> [T] {
-        var req = URLRequest(url: URL(string: base + path)!)
+        guard let url = URL(string: base + path) else { throw CFAPIError.api("Bad request URL.") }
+        var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        if code == 401 || code == 403 { throw CFAPIError.http(code) }
+        // Any non-2xx (401/403/429/5xx, or an HTML edge error) fails with the code,
+        // rather than falling into a raw JSON DecodingError.
+        if !(200..<300).contains(code) {
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errs = obj["errors"] as? [[String: Any]], let msg = errs.first?["message"] as? String {
+                throw CFAPIError.api(msg)
+            }
+            throw CFAPIError.http(code)
+        }
         let decoded = try JSONDecoder().decode(CFListResponse<T>.self, from: data)
         guard decoded.success else {
             throw CFAPIError.api(decoded.errors?.first?.message ?? "Request failed (HTTP \(code)).")
@@ -146,6 +155,14 @@ enum CloudflareAPI {
         req.httpBody = Data(body.utf8)
         let (data, resp) = try await URLSession.shared.data(for: req)
         let http = resp as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
+        if !(200..<300).contains(code) {
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errs = obj["errors"] as? [[String: Any]], let msg = errs.first?["message"] as? String {
+                throw CFAPIError.api(msg)
+            }
+            throw CFAPIError.http(code)
+        }
         if let ct = http?.value(forHTTPHeaderField: "Content-Type"), ct.contains("image") || ct.contains("audio") {
             return "⧉ Binary \(ct) response (\(byteString(Int64(data.count)))). Media models return raw bytes — not shown here."
         }
