@@ -19,3 +19,6 @@ build-release/
 .agents/
 .claude/
 skills-lock.json
+
+# wrangler local cache (may contain account id)
+.wrangler/
